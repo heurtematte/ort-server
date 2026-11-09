@@ -27,7 +27,7 @@ Products are an entity to group repositories within an organization. Admins of a
 
 ### Repositories
 
-A repository represents a VCS repository, for example, a Git repository on GitHub. Admins of a repository can manage:
+A repository represents a VCS repository, for example, a Git repository on GitHub, or an existing SBOM (see [SBOM Repositories](sbom-repositories.md)). Admins of a repository can manage:
 
 - users
 - secrets
