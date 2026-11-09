@@ -39,6 +39,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -55,6 +56,7 @@ import {
 import { ApiError } from '@/lib/api-error';
 import { repositoryCreated } from '@/lib/entity-cache';
 import { createRepositoryAndCredentials } from '@/lib/repository-credentials';
+import { detectSbomSource, getSbomSourceLabel } from '@/lib/sbom-source';
 import { toast, toastError } from '@/lib/toast';
 import { getRepositoryTypeLabel } from '@/lib/types';
 import {
@@ -84,6 +86,11 @@ export const CreateRepositoryForm = ({
     mode: 'onChange',
   });
 
+  const isSbomRepository = form.watch('type') === 'SBOM';
+  const sbomSource = isSbomRepository
+    ? detectSbomSource(form.watch('url'))
+    : undefined;
+
   return (
     <Card>
       <CardHeader>
@@ -102,6 +109,13 @@ export const CreateRepositoryForm = ({
                     <FormControl autoFocus>
                       <Input {...field} />
                     </FormControl>
+                    {isSbomRepository && (
+                      <FormDescription>
+                        {sbomSource
+                          ? `Source: ${getSbomSourceLabel(sbomSource)}. ORT Server confirms it with the server when the repository is created.`
+                          : 'The URL of a Dependency-Track project page, of a sbomify component or product page, or of an SBOM document.'}
+                      </FormDescription>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -143,6 +157,12 @@ export const CreateRepositoryForm = ({
                   <FormControl>
                     <OptionalInput {...field} />
                   </FormControl>
+                  {isSbomRepository && (
+                    <FormDescription>
+                      If empty, the repository is named after the project or
+                      component of its source at the first run.
+                    </FormDescription>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}

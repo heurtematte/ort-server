@@ -59,6 +59,7 @@ import type {
   ProductPermissions,
   RepositoryPermissions,
 } from '@/lib/permissions';
+import { SBOM_REVISION_DESCRIPTION } from '@/lib/sbom-source';
 import {
   AdvisorFields,
   AnalyzerFields,
@@ -106,6 +107,8 @@ export type CreateRunFormProps = {
   defaultPlugins?: DefaultPlugins[];
   isSubmitting: boolean;
   isSuperuser: boolean;
+  /** Whether the repository is of type SBOM, whose revision selects the version of its source. */
+  isSbomRepository?: boolean;
   onConfigContextChange?: (configContext: string) => void;
   onSubmit: (payload: PostRepositoryRun) => Promise<void> | void;
   permissions: CreateRunPermissions;
@@ -126,6 +129,7 @@ export const CreateRunForm = ({
   defaultPlugins,
   isSubmitting,
   isSuperuser,
+  isSbomRepository = false,
   onConfigContextChange,
   onSubmit,
   permissions,
@@ -425,7 +429,9 @@ export const CreateRunForm = ({
                     <Input {...field} />
                   </FormControl>
                   <FormDescription>
-                    {runConfigFields.revision.description}
+                    {isSbomRepository
+                      ? SBOM_REVISION_DESCRIPTION
+                      : runConfigFields.revision.description}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

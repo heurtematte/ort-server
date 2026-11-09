@@ -183,6 +183,7 @@ const CreateRunPage = () => {
       defaultPlugins={defaultPlugins}
       isSubmitting={isPending}
       isSuperuser={isSuperuser}
+      isSbomRepository={repository.type === 'SBOM'}
       onConfigContextChange={setConfigContext}
       onSubmit={submitRun}
       permissions={permissions}
