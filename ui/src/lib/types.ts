@@ -205,6 +205,7 @@ const repositoryTypeLabels: Record<RepositoryType, string> = {
   GIT_REPO: 'Git-Repo',
   MERCURIAL: 'Mercurial',
   SUBVERSION: 'Subversion',
+  SBOM: 'SBOM',
 };
 
 export function getRepositoryTypeLabel(type: RepositoryType | string): string {

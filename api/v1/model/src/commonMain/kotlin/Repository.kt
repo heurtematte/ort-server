@@ -138,5 +138,11 @@ enum class RepositoryType {
     GIT,
     GIT_REPO,
     MERCURIAL,
-    SUBVERSION
+    SUBVERSION,
+
+    /**
+     * A repository that is analyzed based on an existing SBOM instead of source code. The SBOM is either uploaded to
+     * the repository or downloaded from its URL, which may point to a Dependency-Track project.
+     */
+    SBOM
 }
