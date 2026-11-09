@@ -127,7 +127,7 @@ class AnalyzerComponent(
     private fun analyzerModule(): Module = module {
         singleOf(::AnalyzerDownloader)
         singleOf(::AnalyzerRunner)
-        singleOf(::SbomDownloader)
+        single { SbomDownloader(get(), get()) }
 
         // The SBOM downloader needs access to the storage, which is not available in all phases; so create it lazily.
         single { AnalyzerWorker(get(), get(), lazy { get<SbomDownloader>() }) }

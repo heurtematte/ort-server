@@ -61,6 +61,7 @@ dependencies {
     implementation(projects.shared.packageCurationProviders)
     implementation(libs.sbom.packageManager)
     implementation(libs.sbom.parser)
+    implementation(libs.sbom.sources)
     implementation(projects.transport.transportSpi)
     implementation(projects.utils.config)
     implementation(projects.utils.logging)

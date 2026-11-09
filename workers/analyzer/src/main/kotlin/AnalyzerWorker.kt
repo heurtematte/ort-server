@@ -328,8 +328,8 @@ internal suspend fun OrtRunService.getValidOrtRun(job: AnalyzerJob): OrtRun =
 
 /**
  * Return the credentials to download the SBOM of a repository with the given [url] from the infrastructure service
- * among [services] whose URL is the longest prefix of the repository URL, or *null* if there is no such service or
- * its secrets cannot be resolved. Use the given [context] and [environmentService] to resolve the secrets.
+ * among [services] whose URL is the longest prefix of the repository URL, or *null* if there is no such service. Use
+ * the given [context] and [environmentService] to resolve the secrets; fail if they cannot be resolved.
  */
 private suspend fun findSbomCredentials(
     context: WorkerContext,
@@ -341,14 +341,11 @@ private suspend fun findSbomCredentials(
 
     logger.info("Using the credentials of infrastructure service '{}' to obtain the SBOM.", service.name)
 
-    return runCatching {
-        val resolved = environmentService.resolveInfrastructureServices(context, listOf(service)).single()
-        val secrets = context.resolveSecrets(resolved.usernameSecret, resolved.passwordSecret)
+    // Fail fast: a matching service whose credentials cannot be resolved must not lead to an anonymous request.
+    val resolved = environmentService.resolveInfrastructureServices(context, listOf(service)).single()
+    val secrets = context.resolveSecrets(resolved.usernameSecret, resolved.passwordSecret)
 
-        SbomCredentials(secrets.getValue(resolved.usernameSecret), secrets.getValue(resolved.passwordSecret))
-    }.onFailure {
-        logger.warn("Could not resolve the credentials of infrastructure service '{}'.", service.name, it)
-    }.getOrNull()
+    return SbomCredentials(secrets.getValue(resolved.usernameSecret), secrets.getValue(resolved.passwordSecret))
 }
 
 /**
