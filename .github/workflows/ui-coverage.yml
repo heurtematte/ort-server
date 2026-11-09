@@ -19,11 +19,16 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
+env:
+  # Gradle reads the ORT SBOM plugin from GitHub Packages, which requires a token also for public packages.
+  GITHUB_TOKEN: ${{ github.token }}
+
 jobs:
   ui-coverage:
     runs-on: ubuntu-26.04
     permissions:
       contents: read
+      packages: read
     strategy:
       matrix:
         include:

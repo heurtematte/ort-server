@@ -7,6 +7,10 @@ on:
     branches:
     - main
 
+env:
+  # Gradle reads the ORT SBOM plugin from GitHub Packages, which requires a token also for public packages.
+  GITHUB_TOKEN: ${{ github.token }}
+
 jobs:
   website-test:
     runs-on: ubuntu-26.04

@@ -12,6 +12,8 @@ on:
 
 env:
   GRADLE_OPTS: -Dorg.gradle.daemon=false
+  # Gradle reads the ORT SBOM plugin from GitHub Packages, which requires a token also for public packages.
+  GITHUB_TOKEN: ${{ github.token }}
 
 jobs:
   build:
