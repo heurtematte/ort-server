@@ -56,7 +56,7 @@ class AnalyzerDownloader {
          * Generate a name for a directory in which to download the repository for the run with the given [runId].
          * Based on this name, a temporary directory is created.
          */
-        private fun downloadDirName(runId: Long?): String {
+        internal fun downloadDirName(runId: Long?): String {
             val runComponent = runId?.let { "-$it" }.orEmpty()
             return "analyzer-worker$runComponent-download"
         }

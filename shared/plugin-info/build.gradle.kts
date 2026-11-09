@@ -51,6 +51,7 @@ dependencies {
 
     // Depend on the projects that contain custom plugins to make sure they are built before this project.
     compileOnly(projects.shared.packageCurationProviders)
+    compileOnly(libs.sbom.packageManager)
     compileOnly(projects.shared.reporters)
 
     testImplementation(libs.kotest.assertions.core)

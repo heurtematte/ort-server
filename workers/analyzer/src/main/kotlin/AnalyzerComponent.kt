@@ -23,6 +23,7 @@ import org.eclipse.apoapsis.ortserver.components.authorization.service.Authoriza
 import org.eclipse.apoapsis.ortserver.components.authorization.service.DbAuthorizationService
 import org.eclipse.apoapsis.ortserver.components.resolutions.issues.IssueResolutionEventStore
 import org.eclipse.apoapsis.ortserver.components.resolutions.issues.IssueResolutionService
+import org.eclipse.apoapsis.ortserver.components.sbom.sbomStorageModule
 import org.eclipse.apoapsis.ortserver.dao.databaseModule
 import org.eclipse.apoapsis.ortserver.model.orchestrator.AnalyzerRequest
 import org.eclipse.apoapsis.ortserver.model.orchestrator.AnalyzerWorkerError
@@ -116,6 +117,7 @@ class AnalyzerComponent(
 
     override fun customModules(): List<Module> = listOf(
         analyzerModule(),
+        sbomStorageModule,
         databaseModule(startEager = false), // Start services lazily, they are not required for all phases.
         ortRunServiceModule(),
         workerContextModule(),
@@ -125,7 +127,10 @@ class AnalyzerComponent(
     private fun analyzerModule(): Module = module {
         singleOf(::AnalyzerDownloader)
         singleOf(::AnalyzerRunner)
-        singleOf(::AnalyzerWorker)
+        singleOf(::SbomDownloader)
+
+        // The SBOM downloader needs access to the storage, which is not available in all phases; so create it lazily.
+        single { AnalyzerWorker(get(), get(), lazy { get<SbomDownloader>() }) }
         singleOf(::FullPhase) { qualifier = named("full") }.bind(AnalyzerPhase::class)
         singleOf(::PreparationPhase) { qualifier = named(PREPARATION_PHASE) }.bind(AnalyzerPhase::class)
         singleOf(::AnalysisPhase) { qualifier = named(ANALYSIS_PHASE) }.bind(AnalyzerPhase::class)

@@ -29,6 +29,7 @@ import org.eclipse.apoapsis.ortserver.model.AnalyzerJobConfiguration
 import org.eclipse.apoapsis.ortserver.model.InfrastructureService
 import org.eclipse.apoapsis.ortserver.model.OrtRun
 import org.eclipse.apoapsis.ortserver.model.RepositoryId
+import org.eclipse.apoapsis.ortserver.model.RepositoryType
 import org.eclipse.apoapsis.ortserver.model.resolvedconfiguration.AppliedPackageCurationRef
 import org.eclipse.apoapsis.ortserver.model.runs.Identifier
 import org.eclipse.apoapsis.ortserver.model.runs.ShortestDependencyPath
@@ -58,7 +59,8 @@ private val logger = LoggerFactory.getLogger(AnalyzerWorker::class.java)
 
 internal class AnalyzerWorker(
     private val downloader: AnalyzerDownloader,
-    private val runner: AnalyzerRunner
+    private val runner: AnalyzerRunner,
+    private val sbomDownloader: Lazy<SbomDownloader>
 ) {
     /**
      * Execute an Analyzer run for the given [jobId] and [traceId] in the specified [phase] with the given [args] as
@@ -94,9 +96,9 @@ internal class AnalyzerWorker(
      * Prepare the execution of the ORT Analyzer for the current [analyzerJob]. Use the given [context] and
      * [environmentService] to resolve required secrets and set up the environment for the analysis. Use the given
      * [ortRunService] to read and update information about the current run. Clone the repository into the given
-     * [downloadDir] if specified; otherwise, use a temporary directory for this purpose. Generate package manager
-     * configuration files in the given [configDir] if specified; otherwise, generate them directly in the user's
-     * home directory.
+     * [downloadDir] if specified; otherwise, use a temporary directory for this purpose. For a repository of type
+     * [SBOM][RepositoryType.SBOM], obtain its SBOM instead of cloning it. Generate package manager configuration files
+     * in the given [configDir] if specified; otherwise, generate them directly in the user's home directory.
      */
     internal suspend fun prepare(
         context: WorkerContext,
@@ -129,14 +131,26 @@ internal class AnalyzerWorker(
             environmentService.setupAuthentication(context, repositoryServices)
         }
 
-        val downloadResult = downloader.downloadRepository(
-            repository.url,
-            ortRun.revision,
-            ortRun.path.orEmpty(),
-            job.configuration.submoduleFetchStrategy,
-            targetDir = downloadDir,
-            runId = ortRun.id.takeUnless { downloadDir == null }
-        )
+        val isSbomRepository = repository.type == RepositoryType.SBOM
+
+        val downloadResult = if (isSbomRepository) {
+            sbomDownloader.value.download(
+                repository,
+                ortRun.revision,
+                findSbomCredentials(context, environmentService, repositoryServices, repository.url),
+                targetDir = downloadDir,
+                runId = ortRun.id.takeUnless { downloadDir == null }
+            )
+        } else {
+            downloader.downloadRepository(
+                repository.url,
+                ortRun.revision,
+                ortRun.path.orEmpty(),
+                job.configuration.submoduleFetchStrategy,
+                targetDir = downloadDir,
+                runId = ortRun.id.takeUnless { downloadDir == null }
+            )
+        }
 
         if (downloadResult.initRevision != ortRun.revision) {
             logger.info(
@@ -159,7 +173,7 @@ internal class AnalyzerWorker(
         return PrepareResult(
             downloadResult.directory,
             environment,
-            job.configuration.toRunnerConfig(context, ortRun.includesExcludes)
+            job.configuration.toRunnerConfig(context, ortRun.includesExcludes, isSbomRepository)
         )
     }
 
@@ -313,13 +327,48 @@ internal suspend fun OrtRunService.getValidOrtRun(job: AnalyzerJob): OrtRun =
         ?: throw IllegalArgumentException("The ORT run '${job.ortRunId}' does not exist.")
 
 /**
+ * Return the credentials to download the SBOM of a repository with the given [url] from the infrastructure service
+ * among [services] whose URL is the longest prefix of the repository URL, or *null* if there is no such service or
+ * its secrets cannot be resolved. Use the given [context] and [environmentService] to resolve the secrets.
+ */
+private suspend fun findSbomCredentials(
+    context: WorkerContext,
+    environmentService: EnvironmentService,
+    services: List<InfrastructureService>,
+    url: String
+): SbomCredentials? {
+    val service = services.filter { url.isBelow(it.url) }.maxByOrNull { it.url.length } ?: return null
+
+    logger.info("Using the credentials of infrastructure service '{}' to obtain the SBOM.", service.name)
+
+    return runCatching {
+        val resolved = environmentService.resolveInfrastructureServices(context, listOf(service)).single()
+        val secrets = context.resolveSecrets(resolved.usernameSecret, resolved.passwordSecret)
+
+        SbomCredentials(secrets.getValue(resolved.usernameSecret), secrets.getValue(resolved.passwordSecret))
+    }.onFailure {
+        logger.warn("Could not resolve the credentials of infrastructure service '{}'.", service.name, it)
+    }.getOrNull()
+}
+
+/**
+ * Return whether this URL is the given [baseUrl] or below it. The comparison respects path boundaries, so that the
+ * credentials for `https://example.org` are not used for `https://example.org.other.com`.
+ */
+internal fun String.isBelow(baseUrl: String): Boolean {
+    val base = baseUrl.trimEnd('/')
+    return this == base || startsWith("$base/") || startsWith("$base?") || startsWith("$base#")
+}
+
+/**
  * Create an [AnalyzerRunnerConfig] from this [AnalyzerJobConfiguration] to be used to analyze the current project.
  * Use the given [context] to resolve the secrets in the plugin configuration, and add the [includesExcludes] requested
- * for the run.
+ * for the run. The [sbomInput] flag determines whether an SBOM is analyzed instead of source code.
  */
 private suspend fun AnalyzerJobConfiguration.toRunnerConfig(
     context: WorkerContext,
-    includesExcludes: RunIncludesExcludes?
+    includesExcludes: RunIncludesExcludes?,
+    sbomInput: Boolean
 ): AnalyzerRunnerConfig =
     AnalyzerRunnerConfig(
         skipExcluded = skipExcluded,
@@ -331,7 +380,8 @@ private suspend fun AnalyzerJobConfiguration.toRunnerConfig(
         packageCurationProviders = context.resolveProviderPluginConfigSecrets(packageCurationProviders.orEmpty()),
         keepAliveWorker = keepAliveWorker,
         keepAlivePhases = keepAlivePhases,
-        includesExcludes = includesExcludes
+        includesExcludes = includesExcludes,
+        sbomInput = sbomInput
     )
 
 /**
