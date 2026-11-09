@@ -144,6 +144,7 @@ import org.eclipse.apoapsis.ortserver.transport.OrchestratorEndpoint
 import org.eclipse.apoapsis.ortserver.transport.testing.MessageSenderFactoryForTesting
 import org.eclipse.apoapsis.ortserver.utils.system.ORT_SERVER_VERSION
 import org.eclipse.apoapsis.ortserver.utils.test.Integration
+import org.eclipse.apoapsis.sbom.parser.SbomFixtures
 
 @Suppress("LargeClass")
 class RepositoriesRouteIntegrationTest : AbstractIntegrationTest({
@@ -518,6 +519,23 @@ class RepositoriesRouteIntegrationTest : AbstractIntegrationTest({
                     HttpStatusCode.NoContent
 
                 productService.listRepositoriesForProduct(productId).data should beEmpty()
+            }
+        }
+
+        "delete the SBOM of a repository of type SBOM" {
+            integrationTestApplication {
+                val createdRepository = createRepository(type = RepositoryType.SBOM)
+                val sbomUrl = "/api/v1/repositories/${createdRepository.id}/sbom"
+
+                superuserClient.put(sbomUrl) {
+                    setBody(SbomFixtures.bytes(SbomFixtures.CYCLONEDX_1_4_JSON))
+                } shouldHaveStatus HttpStatusCode.OK
+                superuserClient.get(sbomUrl) shouldHaveStatus HttpStatusCode.OK
+
+                superuserClient.delete("/api/v1/repositories/${createdRepository.id}") shouldHaveStatus
+                    HttpStatusCode.NoContent
+
+                superuserClient.get(sbomUrl) shouldHaveStatus HttpStatusCode.NotFound
             }
         }
 

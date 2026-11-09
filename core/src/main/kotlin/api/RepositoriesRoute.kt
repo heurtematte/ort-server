@@ -54,6 +54,7 @@ import org.eclipse.apoapsis.ortserver.components.authorization.routes.requireSup
 import org.eclipse.apoapsis.ortserver.components.authorization.service.AuthorizationService
 import org.eclipse.apoapsis.ortserver.components.authorization.service.UserService
 import org.eclipse.apoapsis.ortserver.components.pluginmanager.PluginTemplateService
+import org.eclipse.apoapsis.ortserver.components.sbom.SbomStorageService
 import org.eclipse.apoapsis.ortserver.config.ConfigException
 import org.eclipse.apoapsis.ortserver.config.ConfigManager
 import org.eclipse.apoapsis.ortserver.config.RequestedConfigContext
@@ -80,6 +81,7 @@ import org.eclipse.apoapsis.ortserver.model.OrganizationId
 import org.eclipse.apoapsis.ortserver.model.ProductId
 import org.eclipse.apoapsis.ortserver.model.Repository
 import org.eclipse.apoapsis.ortserver.model.RepositoryId
+import org.eclipse.apoapsis.ortserver.model.RepositoryType
 import org.eclipse.apoapsis.ortserver.model.User
 import org.eclipse.apoapsis.ortserver.services.RepositoryService
 import org.eclipse.apoapsis.ortserver.services.ortrun.OrtRunService
@@ -121,6 +123,7 @@ fun Route.repositories() = route("repositories/{repositoryId}") {
     val ortRunService by inject<OrtRunService>()
     val pluginTemplateService by inject<PluginTemplateService>()
     val repositoryService by inject<RepositoryService>()
+    val sbomStorageService by inject<SbomStorageService>()
     val userService by inject<UserService>()
 
     get(getRepository, requirePermission(RepositoryPermission.READ)) {
@@ -172,7 +175,11 @@ fun Route.repositories() = route("repositories/{repositoryId}") {
     delete(deleteRepository, requirePermission(RepositoryPermission.DELETE)) {
         val id = call.requireIdParameter("repositoryId")
 
+        val repository = repositoryService.getRepository(id)
         repositoryService.deleteRepository(id)
+
+        // Remove the SBOM of the repository, if any, as it can no longer be referenced.
+        if (repository?.type == RepositoryType.SBOM) sbomStorageService.delete(id)
 
         call.respond(HttpStatusCode.NoContent)
     }

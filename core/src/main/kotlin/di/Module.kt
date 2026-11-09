@@ -56,6 +56,7 @@ import org.eclipse.apoapsis.ortserver.components.resolutions.ruleviolations.Rule
 import org.eclipse.apoapsis.ortserver.components.resolutions.ruleviolations.RuleViolationResolutionService
 import org.eclipse.apoapsis.ortserver.components.resolutions.vulnerabilities.VulnerabilityResolutionEventStore
 import org.eclipse.apoapsis.ortserver.components.resolutions.vulnerabilities.VulnerabilityResolutionService
+import org.eclipse.apoapsis.ortserver.components.sbom.sbomStorageModule
 import org.eclipse.apoapsis.ortserver.components.search.backend.SearchService
 import org.eclipse.apoapsis.ortserver.components.secrets.SecretService
 import org.eclipse.apoapsis.ortserver.components.snippetfindings.SnippetFindingService
@@ -135,7 +136,7 @@ import org.ossreviewtoolkit.scanner.utils.FileListResolver
  * integration tests, the [database][db] from the testcontainer and an [authorizationService] can be provided directly.
  */
 fun ortServerModule(config: ApplicationConfig, db: Database?, authorizationService: AuthorizationService?) = module {
-    includes(reportStorageModule)
+    includes(reportStorageModule, sbomStorageModule)
 
     single { config }
     single { ConfigFactory.parseMap(config.toMap()) }
