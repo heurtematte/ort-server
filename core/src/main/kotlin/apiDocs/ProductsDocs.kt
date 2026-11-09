@@ -286,6 +286,12 @@ val postRepository: RouteConfig.() -> Unit = {
             }
         }
 
+        HttpStatusCode.BadRequest to {
+            description = "The source of the SBOM of a repository of type SBOM cannot be identified: its URL is not " +
+                "the URL of a Dependency-Track project, a sbomify component or product, or an SBOM document, or the " +
+                "server is not of the type of the URL or cannot be reached."
+        }
+
         HttpStatusCode.NotFound to {
             description = "The product does not exist."
         }

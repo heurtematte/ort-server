@@ -93,6 +93,9 @@ class SbomStorageService(
 
         /** Return the storage key for the metadata of the SBOM of the repository with the given [repositoryId]. */
         fun metadataKey(repositoryId: Long) = Key("repository-$repositoryId/sbom-metadata.json")
+
+        /** Return the storage key for the identified source of the repository with the given [repositoryId]. */
+        fun sourceKey(repositoryId: Long) = Key("repository-$repositoryId/sbom-source.json")
     }
 
     /**
@@ -153,10 +156,30 @@ class SbomStorageService(
         return file to metadata
     }
 
-    /** Delete the SBOM of the repository with the given [repositoryId]. Return *false* if there was none. */
+    /** Delete the uploaded SBOM of the repository with the given [repositoryId]. Return *false* if there was none. */
     suspend fun delete(repositoryId: Long): Boolean {
         val deleted = storage.delete(contentKey(repositoryId))
         return storage.delete(metadataKey(repositoryId)) || deleted
+    }
+
+    /**
+     * Store the [source] identified for the repository with the given [repositoryId], replacing the one identified
+     * before.
+     */
+    suspend fun storeSource(repositoryId: Long, source: StoredSbomSource) {
+        storage.write(sourceKey(repositoryId), json.encodeToString(source), "application/json")
+    }
+
+    /** Return the source identified for the repository with the given [repositoryId], or *null*. */
+    suspend fun getSource(repositoryId: Long): StoredSbomSource? =
+        sourceKey(repositoryId).takeIf { storage.containsKey(it) }?.let { key ->
+            storage.read(key).use { entry -> json.decodeFromString<StoredSbomSource>(entry.dataString) }
+        }
+
+    /** Delete all data of the repository with the given [repositoryId]: its uploaded SBOM and its identified source. */
+    suspend fun deleteAll(repositoryId: Long) {
+        delete(repositoryId)
+        storage.delete(sourceKey(repositoryId))
     }
 }
 

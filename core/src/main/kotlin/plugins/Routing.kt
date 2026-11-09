@@ -75,7 +75,7 @@ fun Application.configureRouting() {
                     products()
                     repositories()
                     resolutionRoutes(get(), get(), get())
-                    sbomRoutes(get(), get())
+                    sbomRoutes(get(), get(), get())
                     runs()
                     searchRoutes(get())
                     secretsCompositionRoutes(get(), get())

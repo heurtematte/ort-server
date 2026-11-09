@@ -35,6 +35,7 @@ import io.ktor.utils.io.jvm.javaio.toInputStream
 import java.io.InputStream
 
 import org.eclipse.apoapsis.ortserver.components.sbom.RepositorySbom
+import org.eclipse.apoapsis.ortserver.components.sbom.SbomSourceIdentification
 import org.eclipse.apoapsis.ortserver.components.sbom.SbomStorageService
 import org.eclipse.apoapsis.ortserver.components.sbom.StoredSbom
 import org.eclipse.apoapsis.ortserver.model.Repository
@@ -47,11 +48,17 @@ import org.eclipse.apoapsis.ortserver.shared.ktorutils.respondError
 internal const val SBOM_TAG = "Repositories"
 
 /** Register the routes to manage the SBOMs of repositories of type SBOM. */
-fun Route.sbomRoutes(sbomStorageService: SbomStorageService, repositoryService: RepositoryService) {
+fun Route.sbomRoutes(
+    sbomStorageService: SbomStorageService,
+    repositoryService: RepositoryService,
+    sbomSourceIdentification: SbomSourceIdentification
+) {
     putRepositorySbom(sbomStorageService, repositoryService)
     getRepositorySbom(sbomStorageService)
     getRepositorySbomContent(sbomStorageService)
     deleteRepositorySbom(sbomStorageService)
+    getRepositorySbomSource(sbomStorageService)
+    putRepositorySbomSource(sbomStorageService, repositoryService, sbomSourceIdentification)
 }
 
 internal fun RequestConfig.repositoryIdParameter() {
@@ -93,7 +100,8 @@ internal suspend fun ApplicationCall.requireSbomRepository(repositoryService: Re
         repository.type != RepositoryType.SBOM -> {
             respondError(
                 HttpStatusCode.BadRequest,
-                "SBOMs can only be uploaded to repositories of type '${RepositoryType.SBOM.name}', but repository " +
+                "This operation is only available for repositories of type '${RepositoryType.SBOM.name}', but " +
+                    "repository " +
                     "'$repositoryId' is of type '${repository.type.name}'."
             )
             null

@@ -606,6 +606,39 @@ class ProductsRouteIntegrationTest : AbstractIntegrationTest({
             }
         }
 
+        "create a repository of type SBOM and store the identified source of its SBOM" {
+            integrationTestApplication {
+                val createdProduct = createProduct()
+                val url = "https://example.com/releases/product.cdx.json"
+
+                val response = superuserClient.post("/api/v1/products/${createdProduct.id}/repositories") {
+                    setBody(PostRepository(type = ApiRepositoryType.SBOM, url = url))
+                }
+
+                response shouldHaveStatus HttpStatusCode.Created
+                val repositoryId = response.body<Repository>().id
+
+                val source = superuserClient.get("/api/v1/repositories/$repositoryId/sbom/source")
+                source shouldHaveStatus HttpStatusCode.OK
+                source.bodyAsText() shouldContain "\"type\":\"DOCUMENT\""
+            }
+        }
+
+        "not create a repository of type SBOM whose source cannot be identified" {
+            integrationTestApplication {
+                val createdProduct = createProduct()
+                val url = "http://127.0.0.1:1/projects/00000000-0000-0000-0000-000000000001"
+
+                val response = superuserClient.post("/api/v1/products/${createdProduct.id}/repositories") {
+                    setBody(PostRepository(type = ApiRepositoryType.SBOM, url = url))
+                }
+
+                response shouldHaveStatus HttpStatusCode.BadRequest
+                response.bodyAsText() shouldContain "Could not identify the source of the SBOM"
+                productService.listRepositoriesForProduct(createdProduct.id).totalCount shouldBe 0
+            }
+        }
+
         "create repositories with the same url if their names differ" {
             integrationTestApplication {
                 val createdProduct = createProduct()

@@ -54,6 +54,7 @@ import org.eclipse.apoapsis.ortserver.components.authorization.routes.requireSup
 import org.eclipse.apoapsis.ortserver.components.authorization.service.AuthorizationService
 import org.eclipse.apoapsis.ortserver.components.authorization.service.UserService
 import org.eclipse.apoapsis.ortserver.components.pluginmanager.PluginTemplateService
+import org.eclipse.apoapsis.ortserver.components.sbom.SbomSourceIdentification
 import org.eclipse.apoapsis.ortserver.components.sbom.SbomStorageService
 import org.eclipse.apoapsis.ortserver.config.ConfigException
 import org.eclipse.apoapsis.ortserver.config.ConfigManager
@@ -123,6 +124,7 @@ fun Route.repositories() = route("repositories/{repositoryId}") {
     val ortRunService by inject<OrtRunService>()
     val pluginTemplateService by inject<PluginTemplateService>()
     val repositoryService by inject<RepositoryService>()
+    val sbomSourceIdentification by inject<SbomSourceIdentification>()
     val sbomStorageService by inject<SbomStorageService>()
     val userService by inject<UserService>()
 
@@ -160,6 +162,8 @@ fun Route.repositories() = route("repositories/{repositoryId}") {
             )
         }
 
+        val sbomSource = sbomSourceIdentification.identifyChanged(repositoryService.getRepository(id), updateRepository)
+
         val updatedRepository = repositoryService.updateRepository(
             repositoryId = id,
             type = updateRepository.type.mapToModel { it.mapToModel() },
@@ -168,6 +172,8 @@ fun Route.repositories() = route("repositories/{repositoryId}") {
             productId = updateRepository.productId.mapToModel(),
             name = updateRepository.name.mapToModel()
         )
+
+        sbomStorageService.storeIdentifiedSource(id, sbomSource)
 
         call.respond(HttpStatusCode.OK, updatedRepository.mapToApi())
     }
@@ -179,7 +185,7 @@ fun Route.repositories() = route("repositories/{repositoryId}") {
         repositoryService.deleteRepository(id)
 
         // Remove the SBOM of the repository, if any, as it can no longer be referenced.
-        if (repository?.type == RepositoryType.SBOM) sbomStorageService.delete(id)
+        if (repository?.type == RepositoryType.SBOM) sbomStorageService.deleteAll(id)
 
         call.respond(HttpStatusCode.NoContent)
     }

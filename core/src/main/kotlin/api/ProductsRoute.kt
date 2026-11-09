@@ -52,6 +52,8 @@ import org.eclipse.apoapsis.ortserver.components.authorization.routes.requireSup
 import org.eclipse.apoapsis.ortserver.components.authorization.service.AuthorizationService
 import org.eclipse.apoapsis.ortserver.components.authorization.service.UserService
 import org.eclipse.apoapsis.ortserver.components.pluginmanager.PluginTemplateService
+import org.eclipse.apoapsis.ortserver.components.sbom.SbomSourceIdentification
+import org.eclipse.apoapsis.ortserver.components.sbom.SbomStorageService
 import org.eclipse.apoapsis.ortserver.config.ConfigException
 import org.eclipse.apoapsis.ortserver.config.ConfigManager
 import org.eclipse.apoapsis.ortserver.config.RequestedConfigContext
@@ -121,6 +123,8 @@ fun Route.products() = route("products/{productId}") {
     val authorizationService by inject<AuthorizationService>()
     val configManager by inject<ConfigManager>()
     val productService by inject<ProductService>()
+    val sbomSourceIdentification by inject<SbomSourceIdentification>()
+    val sbomStorageService by inject<SbomStorageService>()
     val pluginTemplateService by inject<PluginTemplateService>()
     val repositoryService by inject<RepositoryService>()
     val vulnerabilityService by inject<VulnerabilityService>()
@@ -185,6 +189,9 @@ fun Route.products() = route("products/{productId}") {
             val id = call.requireIdParameter("productId")
             val createRepository = call.receive<PostRepository>()
             val principal = requirePrincipal()
+
+            val sbomSource = sbomSourceIdentification.identifyNew(createRepository)
+
             val repository = productService.createRepository(
                 createRepository.type.mapToModel(),
                 createRepository.url,
@@ -194,6 +201,8 @@ fun Route.products() = route("products/{productId}") {
                 principal.username,
                 principal.userId
             ).mapToApi()
+
+            sbomStorageService.storeIdentifiedSource(repository.id, sbomSource)
 
             call.respond(
                 HttpStatusCode.Created,

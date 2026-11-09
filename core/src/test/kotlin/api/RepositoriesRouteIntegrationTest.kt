@@ -359,6 +359,25 @@ class RepositoriesRouteIntegrationTest : AbstractIntegrationTest({
             }
         }
 
+        "not change the URL of a repository of type SBOM to a source that cannot be identified" {
+            integrationTestApplication {
+                val createdRepository = createRepository(type = RepositoryType.SBOM)
+
+                val response = superuserClient.patch("/api/v1/repositories/${createdRepository.id}") {
+                    setBody(
+                        PatchRepository(
+                            url = "http://127.0.0.1:1/projects/00000000-0000-0000-0000-000000000001".asPresent()
+                        )
+                    )
+                }
+
+                response shouldHaveStatus HttpStatusCode.BadRequest
+                response.bodyAsText() shouldContain "Could not identify the source of the SBOM"
+                superuserClient.get("/api/v1/repositories/${createdRepository.id}").body<Repository>().url shouldBe
+                    createdRepository.url
+            }
+        }
+
         "respond with 'Bad Request' if the repository's URL is malformed" {
             integrationTestApplication {
                 val createRepository = createRepository()

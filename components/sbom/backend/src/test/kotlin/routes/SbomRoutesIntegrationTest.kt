@@ -41,13 +41,19 @@ import io.ktor.http.contentType
 
 import io.mockk.mockk
 
+import org.eclipse.apoapsis.ortserver.components.sbom.PutRepositorySbomSource
 import org.eclipse.apoapsis.ortserver.components.sbom.RepositorySbom
+import org.eclipse.apoapsis.ortserver.components.sbom.RepositorySbomSource
+import org.eclipse.apoapsis.ortserver.components.sbom.SbomSourceIdentification
+import org.eclipse.apoapsis.ortserver.components.sbom.SbomSourceType
 import org.eclipse.apoapsis.ortserver.components.sbom.SbomStorageService
 import org.eclipse.apoapsis.ortserver.components.sbom.createStorage
 import org.eclipse.apoapsis.ortserver.model.RepositoryType
 import org.eclipse.apoapsis.ortserver.services.RepositoryService
 import org.eclipse.apoapsis.ortserver.shared.ktorutils.AbstractIntegrationTest
 import org.eclipse.apoapsis.sbom.parser.SbomFixtures
+import org.eclipse.apoapsis.sbom.sources.DependencyTrackResponses.dependencyTrackInstance
+import org.eclipse.apoapsis.sbom.sources.MockSbomServer
 
 class SbomRoutesIntegrationTest : AbstractIntegrationTest({
     lateinit var repositoryService: RepositoryService
@@ -76,7 +82,21 @@ class SbomRoutesIntegrationTest : AbstractIntegrationTest({
     fun sbomTestApplication(
         sbomStorageService: SbomStorageService = SbomStorageService(createStorage()),
         block: suspend io.ktor.server.testing.ApplicationTestBuilder.(client: io.ktor.client.HttpClient) -> Unit
-    ) = integrationTestApplication(routes = { sbomRoutes(sbomStorageService, repositoryService) }, block = block)
+    ) = integrationTestApplication(
+        routes = { sbomRoutes(sbomStorageService, repositoryService, SbomSourceIdentification()) },
+        block = block
+    )
+
+    val dependencyTrack = MockSbomServer().apply { dependencyTrackInstance(version = "4.14.5") }
+    val notDependencyTrack = MockSbomServer()
+
+    afterSpec {
+        dependencyTrack.close()
+        notDependencyTrack.close()
+    }
+
+    suspend fun createSbomRepository(url: String) =
+        dbExtension.fixtures.createRepository(type = RepositoryType.SBOM, url = url).id
 
     "PUT /repositories/{repositoryId}/sbom" should {
         "store an SBOM sent as request body and make it available" {
@@ -189,6 +209,68 @@ class SbomRoutesIntegrationTest : AbstractIntegrationTest({
                 client.delete("/repositories/$sbomRepositoryId/sbom") shouldHaveStatus HttpStatusCode.NoContent
                 client.get("/repositories/$sbomRepositoryId/sbom") shouldHaveStatus HttpStatusCode.NotFound
                 client.delete("/repositories/$sbomRepositoryId/sbom") shouldHaveStatus HttpStatusCode.NotFound
+            }
+        }
+    }
+
+    "PUT /repositories/{repositoryId}/sbom/source" should {
+        "identify and store the source of the repository" {
+            sbomTestApplication { client ->
+                val url = "${dependencyTrack.baseUrl}/projects/00000000-0000-0000-0000-000000000002"
+                val repositoryId = createSbomRepository(url)
+
+                val response = client.put("/repositories/$repositoryId/sbom/source") {
+                    contentType(ContentType.Application.Json)
+                    setBody(PutRepositorySbomSource())
+                }
+
+                response shouldHaveStatus HttpStatusCode.OK
+                val source = response.body<RepositorySbomSource>()
+                source.type shouldBe SbomSourceType.DEPENDENCY_TRACK
+                source.url shouldBe url
+                source.apiUrl shouldBe null
+                source.serverVersion shouldBe "4.14.5"
+
+                client.get("/repositories/$repositoryId/sbom/source").body<RepositorySbomSource>() shouldBe source
+            }
+        }
+
+        "reject a server that is not of the type of the URL" {
+            sbomTestApplication { client ->
+                val repositoryId =
+                    createSbomRepository("${notDependencyTrack.baseUrl}/projects/00000000-0000-0000-0000-000000000003")
+
+                val response = client.put("/repositories/$repositoryId/sbom/source") {
+                    contentType(ContentType.Application.Json)
+                    setBody(PutRepositorySbomSource())
+                }
+
+                response shouldHaveStatus HttpStatusCode.BadRequest
+                response.bodyAsText() shouldContain "is not a Dependency-Track instance"
+                client.get("/repositories/$repositoryId/sbom/source") shouldHaveStatus HttpStatusCode.NotFound
+            }
+        }
+
+        "use the given type of source" {
+            sbomTestApplication { client ->
+                val repositoryId =
+                    createSbomRepository("${notDependencyTrack.baseUrl}/projects/00000000-0000-0000-0000-000000000004")
+
+                val response = client.put("/repositories/$repositoryId/sbom/source") {
+                    contentType(ContentType.Application.Json)
+                    setBody(PutRepositorySbomSource(SbomSourceType.DOCUMENT))
+                }
+
+                response shouldHaveStatus HttpStatusCode.OK
+                response.body<RepositorySbomSource>().type shouldBe SbomSourceType.DOCUMENT
+            }
+        }
+    }
+
+    "GET /repositories/{repositoryId}/sbom/source" should {
+        "respond with NotFound if the source has not been identified" {
+            sbomTestApplication { client ->
+                client.get("/repositories/$sbomRepositoryId/sbom/source") shouldHaveStatus HttpStatusCode.NotFound
             }
         }
     }

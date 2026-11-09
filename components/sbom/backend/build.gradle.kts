@@ -29,6 +29,7 @@ group = "org.eclipse.apoapsis.ortserver.components.sbom"
 
 dependencies {
     api(libs.sbom.parser)
+    api(libs.sbom.sources)
     api(projects.storage.storageSpi)
 
     api(libs.koin.core)
@@ -48,6 +49,7 @@ dependencies {
     testImplementation(testFixtures(projects.dao))
     testImplementation(testFixtures(projects.shared.ktorUtils))
     testImplementation(testFixtures(libs.sbom.parser))
+    testImplementation(testFixtures(libs.sbom.sources))
     testImplementation(testFixtures(projects.storage.storageSpi))
 
     testImplementation(ktorLibs.client.core)

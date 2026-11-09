@@ -23,9 +23,14 @@ import org.eclipse.apoapsis.ortserver.storage.Storage
 
 import org.koin.dsl.module
 
-/** A Koin module providing the [SbomStorageService] based on the "sbomStorage" storage configuration. */
+/**
+ * A Koin module providing the [SbomStorageService] based on the "sbomStorage" storage configuration, and the
+ * [SbomSourceIdentification].
+ */
 val sbomStorageModule = module {
     single {
         SbomStorageService(Storage.create(SbomStorageService.STORAGE_TYPE, get(), get()))
     }
+
+    single { SbomSourceIdentification() }
 }
