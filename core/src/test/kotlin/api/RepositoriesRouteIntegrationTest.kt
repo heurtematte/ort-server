@@ -74,6 +74,7 @@ import org.eclipse.apoapsis.ortserver.api.v1.model.JobSummaries
 import org.eclipse.apoapsis.ortserver.api.v1.model.Jobs
 import org.eclipse.apoapsis.ortserver.api.v1.model.NotifierJobConfiguration
 import org.eclipse.apoapsis.ortserver.api.v1.model.OrtRun
+import org.eclipse.apoapsis.ortserver.api.v1.model.PackageManagerConfiguration as ApiPackageManagerConfiguration
 import org.eclipse.apoapsis.ortserver.api.v1.model.PatchRepository
 import org.eclipse.apoapsis.ortserver.api.v1.model.PathExclude as ApiPathExclude
 import org.eclipse.apoapsis.ortserver.api.v1.model.PathExcludeReason as ApiPathExcludeReason
@@ -119,6 +120,7 @@ import org.eclipse.apoapsis.ortserver.model.RepositoryId
 import org.eclipse.apoapsis.ortserver.model.RepositoryType
 import org.eclipse.apoapsis.ortserver.model.SecretSource
 import org.eclipse.apoapsis.ortserver.model.repositories.OrtRunRepository
+import org.eclipse.apoapsis.ortserver.model.runs.PackageManagerConfiguration
 import org.eclipse.apoapsis.ortserver.model.runs.repository.PathExclude
 import org.eclipse.apoapsis.ortserver.model.runs.repository.PathInclude
 import org.eclipse.apoapsis.ortserver.model.runs.repository.PathIncludesExcludes
@@ -925,6 +927,49 @@ class RepositoriesRouteIntegrationTest : AbstractIntegrationTest({
                 run.jobConfigs.ruleSet shouldBe ruleSet
 
                 run.ortServerVersion shouldBe ORT_SERVER_VERSION
+            }
+        }
+
+        "restrict the analyzer of a run of an SBOM repository to the SBOM package manager" {
+            integrationTestApplication {
+                val createdRepository = createRepository(type = RepositoryType.SBOM)
+
+                val createRun = PostRepositoryRun(
+                    revision = "",
+                    jobConfigs = ApiJobConfigurations(
+                        AnalyzerJobConfiguration(
+                            allowDynamicVersions = true,
+                            enabledPackageManagers = listOf("Maven", "NPM", "Unmanaged"),
+                            disabledPackageManagers = listOf("Gradle"),
+                            packageManagerOptions = mapOf(
+                                "SBOM" to ApiPackageManagerConfiguration(
+                                    mustRunAfter = listOf("Maven"),
+                                    options = mapOf("failFast" to "true")
+                                ),
+                                "Maven" to ApiPackageManagerConfiguration(options = mapOf("option" to "value"))
+                            )
+                        )
+                    )
+                )
+
+                val response = superuserClient.post("/api/v1/repositories/${createdRepository.id}/runs") {
+                    setBody(createRun)
+                }
+
+                response shouldHaveStatus HttpStatusCode.Created
+                response.body<OrtRun>().jobConfigs.analyzer.enabledPackageManagers shouldBe listOf("SBOM")
+
+                val run = ortRunRepository.listForRepository(createdRepository.id).data.single()
+                MessageSenderFactoryForTesting.expectMessage(OrchestratorEndpoint)
+
+                with(run.jobConfigs.analyzer) {
+                    allowDynamicVersions shouldBe true
+                    enabledPackageManagers shouldBe listOf("SBOM")
+                    disabledPackageManagers shouldBe null
+                    packageManagerOptions shouldBe mapOf(
+                        "SBOM" to PackageManagerConfiguration(options = mapOf("failFast" to "true"))
+                    )
+                }
             }
         }
 
