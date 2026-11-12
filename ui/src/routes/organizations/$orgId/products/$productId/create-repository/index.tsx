@@ -22,7 +22,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
 import type { ChangeEvent } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 
 import { zRepositoryType } from '@/api/zod.gen';
 import { withProductPermission } from '@/components/authorization';
@@ -86,10 +86,12 @@ export const CreateRepositoryForm = ({
     mode: 'onChange',
   });
 
-  const isSbomRepository = form.watch('type') === 'SBOM';
-  const sbomSource = isSbomRepository
-    ? detectSbomSource(form.watch('url'))
-    : undefined;
+  const [type, url] = useWatch({
+    control: form.control,
+    name: ['type', 'url'],
+  });
+  const isSbomRepository = type === 'SBOM';
+  const sbomSource = isSbomRepository ? detectSbomSource(url) : undefined;
 
   return (
     <Card>
