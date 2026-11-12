@@ -71,11 +71,15 @@ import {
 import {
   defaultValues,
   getDefaultPluginSelections,
+  withSbomPackageManager,
   type PluginGroups,
 } from './default-values';
 import { IncludesExcludesSection } from './includes-excludes-section';
 import { formValuesToPayload } from './payload';
-import { UNMANAGED_PACKAGE_MANAGER_ID } from './plugin-utils';
+import {
+  SBOM_PACKAGE_MANAGER_ID,
+  UNMANAGED_PACKAGE_MANAGER_ID,
+} from './plugin-utils';
 import type { ProjectSuggestions } from './project-suggestions';
 import {
   createRunFormSchema,
@@ -159,11 +163,14 @@ export const CreateRunForm = ({
         'PACKAGE_CONFIGURATION_PROVIDER'
       ),
       // The 'Unmanaged' package manager is always enabled and therefore not offered for selection.
-      packageManagerPlugins: byType('PACKAGE_MANAGER').filter(
-        (plugin) => plugin.id !== UNMANAGED_PACKAGE_MANAGER_ID
+      // The SBOM of an SBOM repository is analyzed only by the SBOM package manager.
+      packageManagerPlugins: byType('PACKAGE_MANAGER').filter((plugin) =>
+        isSbomRepository
+          ? plugin.id === SBOM_PACKAGE_MANAGER_ID
+          : plugin.id !== UNMANAGED_PACKAGE_MANAGER_ID
       ),
     };
-  }, [plugins]);
+  }, [plugins, isSbomRepository]);
   const {
     advisorPlugins,
     reporterPlugins,
@@ -202,11 +209,23 @@ export const CreateRunForm = ({
 
   // `values` lets React Hook Form update untouched fields when the plugins change.
   // Memoize them so unrelated form renders do not trigger a reset.
-  const pluginDefaults = useMemo(
-    () =>
-      defaultValues(rerun, pluginGroups, isSuperuser, defaultPluginSelections),
-    [pluginGroups, rerun, isSuperuser, defaultPluginSelections]
-  );
+  const pluginDefaults = useMemo(() => {
+    const values = defaultValues(
+      rerun,
+      pluginGroups,
+      isSuperuser,
+      defaultPluginSelections
+    );
+    return isSbomRepository
+      ? withSbomPackageManager(values, pluginGroups.packageManagerPlugins)
+      : values;
+  }, [
+    pluginGroups,
+    rerun,
+    isSuperuser,
+    defaultPluginSelections,
+    isSbomRepository,
+  ]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -363,7 +382,7 @@ export const CreateRunForm = ({
 
   async function submitForm(values: CreateRunFormValues) {
     if (pluginsUnavailable) return;
-    await onSubmit(formValuesToPayload(values, plugins));
+    await onSubmit(formValuesToPayload(values, plugins, isSbomRepository));
   }
 
   const onValidationFailed = (errors: typeof form.formState.errors) => {
@@ -676,6 +695,7 @@ export const CreateRunForm = ({
                   packageManagerPlugins={packageManagerPlugins}
                   pluginSecrets={secrets}
                   permissions={permissions}
+                  isSbomRepository={isSbomRepository}
                 />
                 <AdvisorFields
                   form={form}
@@ -780,7 +800,11 @@ export const CreateRunForm = ({
                 id='payload'
                 title='Form payload'
                 description='You can copy this payload to use it when triggering runs via the API or CLI.'
-                payload={formValuesToPayload(watchedValues, plugins)}
+                payload={formValuesToPayload(
+                  watchedValues,
+                  plugins,
+                  isSbomRepository
+                )}
               />
             )}
           </CardFooter>

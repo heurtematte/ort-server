@@ -82,6 +82,11 @@ type AnalyzerFieldsProps = {
   };
   /** The plugins that are selected by default, to which the plugin lists can be reset, if known. */
   defaultPluginSelections?: DefaultPluginSelections;
+  /**
+   * Whether the repository is of type SBOM. Its SBOM is analyzed only by the SBOM package manager,
+   * which is the only package manager offered and cannot be disabled; only its options can be set.
+   */
+  isSbomRepository?: boolean;
 };
 
 export const AnalyzerFields = ({
@@ -94,6 +99,7 @@ export const AnalyzerFields = ({
   pluginSecrets,
   permissions,
   defaultPluginSelections,
+  isSbomRepository = false,
 }: AnalyzerFieldsProps) => {
   const { orgId, productId, repoId } = useParams({ strict: false });
   const {
@@ -329,19 +335,36 @@ export const AnalyzerFields = ({
             </div>
           </div>
           <EnvironmentDefinitionsFields form={form} />
-          <PluginMultiSelectField
-            form={form}
-            name='jobConfigs.analyzer.packageManagers'
-            defaultPluginIds={defaultPluginSelections?.packageManagers}
-            configName='jobConfigs.analyzer.packageManagerConfig'
-            mustRunAfterName='jobConfigs.analyzer.packageManagerMustRunAfter'
-            label={jobConfigFields['analyzer.enabledPackageManagers'].label}
-            description={
-              jobConfigFields['analyzer.enabledPackageManagers'].description
-            }
-            plugins={packageManagerPlugins}
-            secrets={[]}
-          />
+          {isSbomRepository ? (
+            <PluginMultiSelectField
+              form={form}
+              name='jobConfigs.analyzer.packageManagers'
+              configName='jobConfigs.analyzer.packageManagerConfig'
+              label={jobConfigFields['analyzer.enabledPackageManagers'].label}
+              description={
+                packageManagerPlugins.length > 0
+                  ? 'The SBOM of this repository is analyzed only by the SBOM package manager, whatever package managers are configured. Its options can be set here.'
+                  : 'The SBOM package manager, which analyzes the SBOM of this repository, is not available, so the analysis of this repository fails.'
+              }
+              plugins={packageManagerPlugins}
+              secrets={[]}
+              selectionLocked
+            />
+          ) : (
+            <PluginMultiSelectField
+              form={form}
+              name='jobConfigs.analyzer.packageManagers'
+              defaultPluginIds={defaultPluginSelections?.packageManagers}
+              configName='jobConfigs.analyzer.packageManagerConfig'
+              mustRunAfterName='jobConfigs.analyzer.packageManagerMustRunAfter'
+              label={jobConfigFields['analyzer.enabledPackageManagers'].label}
+              description={
+                jobConfigFields['analyzer.enabledPackageManagers'].description
+              }
+              plugins={packageManagerPlugins}
+              secrets={[]}
+            />
+          )}
           <PluginMultiSelectField
             form={form}
             name='jobConfigs.analyzer.packageCurationProviders'
