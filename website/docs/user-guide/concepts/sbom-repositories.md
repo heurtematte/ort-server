@@ -42,6 +42,7 @@ The source of the SBOM is identified once, when the repository is created or its
 - The server must then confirm it through the public endpoints these platforms provide for this purpose, without credentials: `GET <frontend>/static/config.json` and `GET <api>/api/version` for Dependency-Track, `GET <base>/api/v1/openapi.json` for sbomify.
   The configuration of the Dependency-Track frontend also gives the URL of its API server, if the API is not served by the frontend.
 - If the URL does not match a type of source, or the server is not of this type or cannot be reached, the repository is not created or changed: the request fails with status 400 and explains why.
+  A server that is temporarily unavailable, for instance answering with status 503, is first retried twice within a few seconds.
 
 The identified source is stored with the repository, and every run uses it as it is.
 `GET /api/v1/repositories/{repositoryId}/sbom/source` returns it, and `PUT /api/v1/repositories/{repositoryId}/sbom/source` identifies it again, for instance after the server moved, optionally with an explicit `type` (`DEPENDENCY_TRACK`, `SBOMIFY`, or `DOCUMENT`) to treat a URL that looks like a Dependency-Track or sbomify page as a document.
@@ -80,7 +81,8 @@ A run fails at once, before the ORT Analyzer is started, if:
 - no SBOM was uploaded and the source of the repository has not been identified, or was identified for another URL;
 - the revision cannot be used for the source, or does not exist;
 - the source is a Dependency-Track project and no infrastructure service provides credentials for it, or the credentials of the matching infrastructure service cannot be resolved: Dependency-Track is never accessed anonymously;
-- the source refuses the request, for instance with status 401 or 403, or does not provide an SBOM in a supported format.
+- the source refuses the request, for instance with status 401 or 403, or does not provide an SBOM in a supported format;
+- the source is still unavailable after the retries: a request that gets no response, or the status 408, 429, 502, 503, or 504, is retried five times within about one minute, as the server may be restarting.
 
 ### Name of the repository
 
