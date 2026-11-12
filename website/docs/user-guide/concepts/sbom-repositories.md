@@ -120,11 +120,16 @@ The conversion is done by the `SBOM` package manager plugin, which is provided b
 
 The plugin supports the following options, which can be set in the `packageManagerOptions` of the analyzer job configuration under the name `SBOM`:
 
-| Option                         | Default    | Description                                                                                                                                                                                                   |
-| ------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `attachUnreferencedComponents` | `true`     | Whether components that are not reachable from a described component are added as direct dependencies of the project. If disabled, they are dropped with a warning.                                           |
-| `concludedLicenseHandling`     | `DECLARED` | How licenses an SBOM marks as concluded are mapped: `DECLARED` uses them as declared licenses of packages without declared licenses, `CONCLUDED` maps them to the concluded license, and `IGNORE` drops them. |
-| `definitionFilePatterns`       | see plugin | The file name patterns of SBOMs, see below.                                                                                                                                                                   |
+| Option                         | Default    | Description                                                                                                                                                                                                       |
+| ------------------------------ | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `attachUnreferencedComponents` | `true`     | Whether components that are not reachable from a described component are added as direct dependencies of the project. If disabled, they are dropped with a warning.                                               |
+| `concludedLicenseHandling`     | `DECLARED` | How licenses an SBOM marks as concluded are mapped: `DECLARED` uses them as declared licenses of packages without declared licenses, `CONCLUDED` maps them to the concluded license, and `IGNORE` drops them.     |
+| `definitionFilePatterns`       | see plugin | The file name patterns of SBOMs, see below.                                                                                                                                                                       |
+| `failFast`                     | `false`    | Whether the retrieval of the SBOMs listed by an SBOM source file of the plugin stops at the first source that cannot be retrieved. Runs of SBOM repositories always fail fast, see [Failing fast](#failing-fast). |
+
+For a repository of type SBOM, the SBOM is analyzed only by the `SBOM` package manager, whatever package managers are configured, so it does not need to be enabled for these runs or among the default plugins.
+When a run of such a repository is created, the package managers of its analyzer configuration are set to `SBOM`, and the options of other package managers are removed, so that the configuration of the run shows what is analyzed.
+The create run form of the UI only shows this package manager for such a repository, enabled and locked, so that its options can be set.
 
 The `SBOM` package manager can also be enabled for runs of source code repositories by adding it to the `enabledPackageManagers` of the analyzer job configuration.
 It then analyzes all files matching `definitionFilePatterns` (such as `*.cdx.json`, `bom.xml`, or `*.spdx.json`) whose content is a supported SBOM.
