@@ -23,7 +23,7 @@ import java.io.File
 
 import org.eclipse.apoapsis.ortserver.components.adminconfig.AdminConfigService
 import org.eclipse.apoapsis.ortserver.components.resolutions.issues.IssueResolutionService
-import org.eclipse.apoapsis.ortserver.dao.transaction
+import org.eclipse.apoapsis.ortserver.dao.transactionWithRetry
 import org.eclipse.apoapsis.ortserver.model.AnalyzerJob
 import org.eclipse.apoapsis.ortserver.model.AnalyzerJobConfiguration
 import org.eclipse.apoapsis.ortserver.model.InfrastructureService
@@ -258,7 +258,8 @@ internal class AnalyzerWorker(
             }
         }
 
-        db.transaction {
+        // Concurrent runs can create the same identifiers, VCS information, or remote artifacts at the same time.
+        db.transactionWithRetry {
             ortRunService.getValidAnalyzerJob(job.id)
             ortRunService.storeAnalyzerRun(
                 analyzerRun.mapToModel(job.id),
