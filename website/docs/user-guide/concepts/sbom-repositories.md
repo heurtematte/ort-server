@@ -38,8 +38,10 @@ The SBOM of a repository is obtained from the first of the following sources tha
 ### Repositories with uploaded SBOMs only
 
 An SBOM that is not published anywhere, such as an SBOM received from a supplier, can be uploaded when the repository is created: in the **Add Repository** form of the UI, choose the type **SBOM** and **Upload a file**, and select the SBOM file instead of entering a URL.
-The repository then gets an upload URL, such as `upload:bom.cdx.json`, which only labels the repository: it has no source, so that its SBOM is never downloaded.
-With the API, create the repository with such a URL, which is only accepted for repositories of type SBOM, and upload the SBOM afterwards.
+The repository then gets an upload URL with the name of the file and the time of the upload, such as `upload:bom.cdx.json@2026-11-13T17:05:12Z`, which only labels the repository: it has no source, so that its SBOM is never downloaded.
+The time keeps repositories created from files with the same name apart, as the URL and the name of a repository must be unique within a product.
+With the API, create the repository with a URL starting with `upload:`, which is only accepted for repositories of type SBOM, and upload the SBOM afterwards.
+SBOMs larger than 1 MB can only be uploaded if the reverse proxies in front of ORT Server accept such requests, for instance with the `nginx.ingress.kubernetes.io/proxy-body-size` annotation of ingress-nginx, whose default limit is 1 MB.
 Runs of such a repository fail if no SBOM was uploaded.
 If the repository has no name, it is named after the component that the uploaded SBOM describes at its first run.
 
