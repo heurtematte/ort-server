@@ -35,6 +35,14 @@ The SBOM of a repository is obtained from the first of the following sources tha
    - **A sbomify component or product**, if the URL is the URL of a component or product page of a [sbomify](https://github.com/sbomify/sbomify) instance, such as `https://app.sbomify.com/component/<id>/` or `https://app.sbomify.com/public/product/<id>/`: the analyzer downloads the SBOM of the component, or the aggregated SBOM of the product.
    - **An SBOM document**, for any other URL: the analyzer downloads the document the URL points to.
 
+### Repositories with uploaded SBOMs only
+
+An SBOM that is not published anywhere, such as an SBOM received from a supplier, can be uploaded when the repository is created: in the **Add Repository** form of the UI, choose the type **SBOM** and **Upload a file**, and select the SBOM file instead of entering a URL.
+The repository then gets an upload URL, such as `upload:bom.cdx.json`, which only labels the repository: it has no source, so that its SBOM is never downloaded.
+With the API, create the repository with such a URL, which is only accepted for repositories of type SBOM, and upload the SBOM afterwards.
+Runs of such a repository fail if no SBOM was uploaded.
+If the repository has no name, it is named after the component that the uploaded SBOM describes at its first run.
+
 ### Identification of the source
 
 The source of the SBOM is identified once, when the repository is created or its URL or type changes, and not guessed again at each run:
@@ -79,7 +87,7 @@ For documents, the credentials are used for HTTP basic authentication.
 
 A run fails at once, before the ORT Analyzer is started, if:
 
-- no SBOM was uploaded and the source of the repository has not been identified, or was identified for another URL;
+- no SBOM was uploaded and the repository has an upload URL, or its source has not been identified, or was identified for another URL;
 - the revision cannot be used for the source, or does not exist;
 - the source is a Dependency-Track project and no infrastructure service provides credentials for it, or the credentials of the matching infrastructure service cannot be resolved: Dependency-Track is never accessed anonymously;
 - the source refuses the request, for instance with status 401 or 403, or does not provide an SBOM in a supported format;
