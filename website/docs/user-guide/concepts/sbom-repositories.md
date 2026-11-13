@@ -117,6 +117,8 @@ The conversion is done by the `SBOM` package manager plugin, which is provided b
 - Scopes are taken from the CycloneDX component scope (`required`, `optional`, `excluded`) or from the type of SPDX relationships (for instance `test` for `TEST_DEPENDENCY_OF`); the default scope of SPDX dependencies is `dependencies`.
   Scope excludes and includes of a run apply to them.
 - Declared licenses, copyrights, authors, hashes, download locations, and VCS information of components are mapped to the corresponding package properties.
+  VCS URLs in the format of Maven SCM connections, such as `scm:git:git@github.com:org/repo.git`, are supported, including the path and the commit that Tycho adds from the `Eclipse-SourceReferences` of bundles.
+- If the SBOM gives no source artifact for a package, the plugin derives it from the package URL where the registry makes its location predictable: the sources JAR of Maven packages and the tarball of npm packages.
 - Colons in the coordinates of components, such as in container image digests or Debian versions with an epoch, are encoded as `%3A` in the identifiers, because ORT does not allow them there; the package URLs keep the original values.
 - Invalid values that do not affect the analysis, such as a malformed timestamp of a CycloneDX BOM or a hash value of the wrong length, are ignored.
 
@@ -127,6 +129,7 @@ The plugin supports the following options, which can be set in the `packageManag
 | `attachUnreferencedComponents` | `true`     | Whether components that are not reachable from a described component are added as direct dependencies of the project. If disabled, they are dropped with a warning.                                               |
 | `concludedLicenseHandling`     | `DECLARED` | How licenses an SBOM marks as concluded are mapped: `DECLARED` uses them as declared licenses of packages without declared licenses, `CONCLUDED` maps them to the concluded license, and `IGNORE` drops them.     |
 | `definitionFilePatterns`       | see plugin | The file name patterns of SBOMs, see below.                                                                                                                                                                       |
+| `deriveSourceArtifacts`        | `true`     | Whether packages for which the SBOM gives no source artifact get the one derived from their package URL, so that the scanner can get their sources.                                                               |
 | `failFast`                     | `false`    | Whether the retrieval of the SBOMs listed by an SBOM source file of the plugin stops at the first source that cannot be retrieved. Runs of SBOM repositories always fail fast, see [Failing fast](#failing-fast). |
 
 For a repository of type SBOM, the SBOM is analyzed only by the `SBOM` package manager, whatever package managers are configured, so it does not need to be enabled for these runs or among the default plugins.
@@ -140,7 +143,7 @@ Do not enable it together with the `SpdxDocumentFile` package manager, as both h
 ## Limitations
 
 - An SBOM does not provide the source code of its projects, so the scanner cannot scan them.
-  Packages are scanned if the SBOM provides a VCS or a source artifact location for them.
+  Packages are scanned if the SBOM provides a VCS or a source artifact location for them, or if a source artifact can be derived from their package URL.
   For SBOM repositories, it is usually sufficient to run the analyzer, the advisor, the evaluator, and the reporter.
 - Dependency-Track does not keep uploaded SBOMs, but generates a CycloneDX SBOM from its own model when it is exported.
 - Repository configuration files (`.ort.yml`) are not available for SBOM repositories; use the resolutions and the run configuration of ORT Server instead.
