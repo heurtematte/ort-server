@@ -21,6 +21,7 @@ import { AxiosError } from 'axios';
 
 import type { PutRepositorySbomData, RepositorySbom } from '@/api';
 import { getRepositorySbomContent, putRepositorySbom } from '@/api/sdk.gen';
+import { formatFileSize } from '@/helpers/format-file-size';
 import {
   createRepositoryAndCredentials,
   type CreateRepositoryResult,
@@ -53,18 +54,29 @@ export async function uploadRepositorySbom(
   repositoryId: number,
   file: File
 ): Promise<RepositorySbom> {
-  const { data } = await putRepositorySbom({
-    path: { repositoryId },
-    query: { fileName: file.name },
-    // The API documentation describes the binary body as an array of bytes. Send the file as it
-    // is instead of serializing it as JSON; ORT Server detects its format from the content.
-    body: file as unknown as PutRepositorySbomData['body'],
-    bodySerializer: null,
-    headers: { 'Content-Type': 'application/octet-stream' },
-    throwOnError: true,
-  });
+  try {
+    const { data } = await putRepositorySbom({
+      path: { repositoryId },
+      query: { fileName: file.name },
+      // The API documentation describes the binary body as an array of bytes. Send the file as it
+      // is instead of serializing it as JSON; ORT Server detects its format from the content.
+      body: file as unknown as PutRepositorySbomData['body'],
+      bodySerializer: null,
+      headers: { 'Content-Type': 'application/octet-stream' },
+      throwOnError: true,
+    });
 
-  return data;
+    return data;
+  } catch (error) {
+    // A proxy in front of ORT Server may reject the upload with an HTML page, which has no message.
+    if (error instanceof AxiosError && error.response?.status === 413) {
+      error.message =
+        `The SBOM (${formatFileSize(file.size)}) is larger than ORT Server or a proxy in front ` +
+        'of it accepts (HTTP 413 Payload Too Large).';
+    }
+
+    throw error;
+  }
 }
 
 /** Download the SBOM uploaded for the repository with the given ID as a file. */

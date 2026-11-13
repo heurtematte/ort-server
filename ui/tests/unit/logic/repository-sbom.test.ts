@@ -84,6 +84,19 @@ describe('repository SBOM', () => {
     });
   });
 
+  it('explains uploads that are too large for a proxy', async () => {
+    const error = axiosError(413);
+    vi.mocked(putRepositorySbom).mockRejectedValue(error);
+
+    await expect(
+      uploadRepositorySbom(7, new File(['x'.repeat(2048)], 'bom.cdx.json'))
+    ).rejects.toBe(error);
+    expect(error.message).toBe(
+      'The SBOM (2.0 kB) is larger than ORT Server or a proxy in front of it accepts ' +
+        '(HTTP 413 Payload Too Large).'
+    );
+  });
+
   it('propagates the errors of ORT Server', async () => {
     const error = axiosError(400);
     vi.mocked(putRepositorySbom).mockRejectedValue(error);
