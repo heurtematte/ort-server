@@ -380,6 +380,42 @@ class RepositoriesRouteIntegrationTest : AbstractIntegrationTest({
             }
         }
 
+        "change the URL of a repository of type SBOM to an upload URL and delete its source" {
+            integrationTestApplication {
+                val createdRepository = createRepository(type = RepositoryType.SBOM)
+                val repositoryPath = "/api/v1/repositories/${createdRepository.id}"
+
+                superuserClient.patch(repositoryPath) {
+                    setBody(PatchRepository(url = "https://example.com/releases/product.cdx.json".asPresent()))
+                } shouldHaveStatus HttpStatusCode.OK
+                superuserClient.get("$repositoryPath/sbom/source") shouldHaveStatus HttpStatusCode.OK
+
+                val response = superuserClient.patch(repositoryPath) {
+                    setBody(PatchRepository(url = "upload:bom.cdx.json".asPresent()))
+                }
+
+                response shouldHaveStatus HttpStatusCode.OK
+                response.body<Repository>().url shouldBe "upload:bom.cdx.json"
+                superuserClient.get("$repositoryPath/sbom/source") shouldHaveStatus HttpStatusCode.NotFound
+                superuserClient.put("$repositoryPath/sbom/source") shouldHaveStatus HttpStatusCode.BadRequest
+            }
+        }
+
+        "not change the URL of a repository of another type than SBOM to an upload URL" {
+            integrationTestApplication {
+                val createdRepository = createRepository(type = RepositoryType.GIT)
+
+                val response = superuserClient.patch("/api/v1/repositories/${createdRepository.id}") {
+                    setBody(PatchRepository(url = "upload:bom.cdx.json".asPresent()))
+                }
+
+                response shouldHaveStatus HttpStatusCode.BadRequest
+                response.bodyAsText() shouldContain "only valid for repositories of type SBOM"
+                superuserClient.get("/api/v1/repositories/${createdRepository.id}").body<Repository>().url shouldBe
+                    createdRepository.url
+            }
+        }
+
         "respond with 'Bad Request' if the repository's URL is malformed" {
             integrationTestApplication {
                 val createRepository = createRepository()

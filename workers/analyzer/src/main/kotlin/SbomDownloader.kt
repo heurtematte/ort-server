@@ -37,6 +37,7 @@ import org.eclipse.apoapsis.ortserver.components.sbom.sha256
 import org.eclipse.apoapsis.ortserver.model.Repository
 import org.eclipse.apoapsis.ortserver.model.repositories.RepositoryRepository
 import org.eclipse.apoapsis.ortserver.model.util.asPresent
+import org.eclipse.apoapsis.sbom.parser.SbomDocument
 import org.eclipse.apoapsis.sbom.parser.SbomParser
 import org.eclipse.apoapsis.sbom.sources.CredentialsProvider
 import org.eclipse.apoapsis.sbom.sources.SbomFetcher
@@ -69,7 +70,11 @@ data class SbomCredentials(val username: String, val password: String)
  * credentials are missing, or the retrieval fails, an [IOException] is thrown before the ORT Analyzer is started.
  *
  * If the [repositoryRepository] is given and the repository has no name, it is named after the project, component, or
- * product of the source, such as `che-server` for a Dependency-Track project.
+ * product of the source, such as `che-server` for a Dependency-Track project, or after the component that an uploaded
+ * SBOM describes.
+ *
+ * A repository whose URL is an upload URL, such as "upload:bom.cdx.json", has no source: its runs fail if no SBOM was
+ * uploaded.
  */
 class SbomDownloader(
     private val sbomStorageService: SbomStorageService,
@@ -107,6 +112,8 @@ class SbomDownloader(
         }
 
         val document = SbomParser.parse(file)
+        if (uploaded != null) nameRepository(repository, document.describedName())
+
         val rootVersion = document.roots.firstNotNullOfOrNull { document.components[it]?.version }
         val initRevision = revision.ifEmpty { versionFromSource ?: rootVersion.orEmpty() }
         val resolvedRevision = "sha256:${file.readBytes().sha256()}"
@@ -134,6 +141,13 @@ class SbomDownloader(
         credentials: SbomCredentials?,
         outputDir: File
     ): Pair<File, String?> {
+        if (repository.isSbomUploadOnly) {
+            throw IOException(
+                "No SBOM was uploaded for repository '${repository.id}', whose SBOM is only uploaded. Upload it on " +
+                    "the SBOM page of the repository, or with 'PUT /api/v1/repositories/${repository.id}/sbom'."
+            )
+        }
+
         val identified = sbomStorageService.getSource(repository.id)
             ?: throw IOException(
                 "The source of the SBOM of repository '${repository.id}' has not been identified, and no SBOM was " +
@@ -163,7 +177,7 @@ class SbomDownloader(
         return file to fetched.version
     }
 
-    /** Name the given [repository] after its source with the given [name] if the repository has no name yet. */
+    /** Name the given [repository] after its SBOM with the given [name] if the repository has no name yet. */
     private suspend fun nameRepository(repository: Repository, name: String?) {
         val repositories = repositoryRepository ?: return
         val repositoryName = name?.trim()?.takeUnless { it.isEmpty() || INVALID_NAME_CHARACTERS.containsMatchIn(it) }
@@ -172,12 +186,16 @@ class SbomDownloader(
         runCatching {
             repositories.update(repository.id, name = repositoryName.asPresent())
         }.onSuccess {
-            logger.info("Named repository '{}' '{}' after its source.", repository.id, repositoryName)
+            logger.info("Named repository '{}' '{}' after its SBOM.", repository.id, repositoryName)
         }.onFailure {
             logger.warn("Could not name repository '{}' '{}'.", repository.id, repositoryName, it)
         }
     }
 }
+
+/** Return the name of the first component that this document describes, or the name of the document. */
+private fun SbomDocument.describedName(): String? =
+    roots.firstNotNullOfOrNull { components[it]?.name } ?: name
 
 /** Return the endpoint to identify the source of the given [repository] again. */
 private fun sourceEndpoint(repository: Repository) = "PUT /api/v1/repositories/${repository.id}/sbom/source"

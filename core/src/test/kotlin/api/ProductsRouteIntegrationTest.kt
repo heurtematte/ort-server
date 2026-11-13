@@ -624,6 +624,35 @@ class ProductsRouteIntegrationTest : AbstractIntegrationTest({
             }
         }
 
+        "create a repository of type SBOM whose SBOM is only uploaded without identifying a source" {
+            integrationTestApplication {
+                val createdProduct = createProduct()
+
+                val response = superuserClient.post("/api/v1/products/${createdProduct.id}/repositories") {
+                    setBody(PostRepository(type = ApiRepositoryType.SBOM, url = "upload:bom.cdx.json"))
+                }
+
+                response shouldHaveStatus HttpStatusCode.Created
+                val repository = response.body<Repository>()
+                repository.url shouldBe "upload:bom.cdx.json"
+                superuserClient.get("/api/v1/repositories/${repository.id}/sbom/source") shouldHaveStatus
+                    HttpStatusCode.NotFound
+            }
+        }
+
+        "not accept an upload URL for a repository of another type than SBOM" {
+            integrationTestApplication {
+                val createdProduct = createProduct()
+
+                val response = superuserClient.post("/api/v1/products/${createdProduct.id}/repositories") {
+                    setBody(PostRepository(type = ApiRepositoryType.GIT, url = "upload:bom.cdx.json"))
+                }
+
+                response shouldHaveStatus HttpStatusCode.BadRequest
+                response.body<ErrorResponse>().cause shouldContain "Validation failed for PostRepository"
+            }
+        }
+
         "not create a repository of type SBOM whose source cannot be identified" {
             integrationTestApplication {
                 val createdProduct = createProduct()

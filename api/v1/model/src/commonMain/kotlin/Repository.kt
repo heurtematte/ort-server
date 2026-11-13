@@ -56,6 +56,17 @@ data class Repository(
         const val REPOSITORY_URL_TYPE = "repository"
         val NAME_PATTERN_REGEX = Product.NAME_PATTERN_REGEX
         const val NAME_PATTERN_MESSAGE = Product.NAME_PATTERN_MESSAGE
+
+        /**
+         * The prefix of the URL of a repository of type [SBOM][RepositoryType.SBOM] whose SBOM is only uploaded, such
+         * as "upload:bom.cdx.json". Such a repository has no source to retrieve the SBOM from; the rest of the URL is
+         * only a label, such as the name of the uploaded file. This is the same prefix as in the model of ORT Server.
+         */
+        const val SBOM_UPLOAD_URL_PREFIX = "upload:"
+
+        /** Return whether the given [url] is the URL of a repository of type SBOM whose SBOM is only uploaded. */
+        fun isSbomUploadUrl(url: String): Boolean =
+            url.trim().let { it.length > SBOM_UPLOAD_URL_PREFIX.length && it.startsWith(SBOM_UPLOAD_URL_PREFIX) }
     }
 }
 
@@ -72,7 +83,8 @@ data class PostRepository(
             Validation {
                 PostRepository::url {
                     constrain("malformed URL") {
-                        urlValidator.isValidUrl(it)
+                        urlValidator.isValidUrl(it) ||
+                            (obj.type == RepositoryType.SBOM && Repository.isSbomUploadUrl(it))
                     } hint UrlValidator.invalidUrlMessage(Repository.REPOSITORY_URL_TYPE)
 
                     constrain("URL cannot contain userinfo") {
@@ -108,7 +120,10 @@ data class PatchRepository(
                 PatchRepository::url {
                     constrain("malformed URL") {
                         when (it) {
-                            is OptionalValue.Present -> urlValidator.isValidUrl(it.value)
+                            // The type of the repository is checked when the update is applied if it is not changed.
+                            is OptionalValue.Present -> urlValidator.isValidUrl(it.value) ||
+                                (obj.type.isSbomOrAbsent() && Repository.isSbomUploadUrl(it.value))
+
                             is OptionalValue.Absent -> true
                         }
                     } hint UrlValidator.invalidUrlMessage(Repository.REPOSITORY_URL_TYPE)
@@ -146,3 +161,10 @@ enum class RepositoryType {
      */
     SBOM
 }
+
+/** Return whether this optional repository type is absent or [RepositoryType.SBOM]. */
+private fun OptionalValue<RepositoryType>.isSbomOrAbsent(): Boolean =
+    when (this) {
+        is OptionalValue.Present -> value == RepositoryType.SBOM
+        is OptionalValue.Absent -> true
+    }

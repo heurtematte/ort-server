@@ -294,6 +294,32 @@ class SbomDownloaderTest : WordSpec({
             coVerify(exactly = 1) { repositories.update(6L, name = "imap".asPresent()) }
         }
 
+        "name the repository after the component that an uploaded SBOM describes if it has no name" {
+            val storageService = SbomStorageService(createTestStorage())
+            val content = """
+                {"bomFormat": "CycloneDX", "specVersion": "1.6", "version": 1,
+                 "metadata": {"component": {"type": "application", "bom-ref": "app", "name": "my-product"}}}
+            """.trimIndent().toByteArray()
+            storageService.store(14L, content, "bom.cdx.json", null)
+            val repositories = mockk<RepositoryRepository> {
+                coEvery { update(any(), name = any()) } returns sbomRepository(14L, "upload:bom.cdx.json", "my-product")
+            }
+
+            SbomDownloader(storageService, repositories).download(sbomRepository(14L, "upload:bom.cdx.json"), "", null)
+
+            coVerify(exactly = 1) { repositories.update(14L, name = "my-product".asPresent()) }
+        }
+
+        "fail if no SBOM was uploaded for a repository whose SBOM is only uploaded" {
+            shouldThrow<IOException> {
+                SbomDownloader(SbomStorageService(createTestStorage())).download(
+                    sbomRepository(15L, "upload:bom.cdx.json"),
+                    "",
+                    null
+                )
+            }.message shouldContain "No SBOM was uploaded for repository '15'"
+        }
+
         "not rename a repository that has a name" {
             stubDependencyTrack()
             val repositories = mockk<RepositoryRepository>()

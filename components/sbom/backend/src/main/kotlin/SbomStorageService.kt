@@ -176,10 +176,15 @@ class SbomStorageService(
             storage.read(key).use { entry -> json.decodeFromString<StoredSbomSource>(entry.dataString) }
         }
 
+    /**
+     * Delete the source identified for the repository with the given [repositoryId]. Return *false* if there was none.
+     */
+    suspend fun deleteSource(repositoryId: Long): Boolean = storage.delete(sourceKey(repositoryId))
+
     /** Delete all data of the repository with the given [repositoryId]: its uploaded SBOM and its identified source. */
     suspend fun deleteAll(repositoryId: Long) {
         delete(repositoryId)
-        storage.delete(sourceKey(repositoryId))
+        deleteSource(repositoryId)
     }
 }
 

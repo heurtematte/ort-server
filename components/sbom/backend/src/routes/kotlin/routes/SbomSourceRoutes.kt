@@ -105,7 +105,8 @@ internal fun Route.putRepositorySbomSource(
             }
 
             HttpStatusCode.BadRequest to {
-                description = "The repository is not of type SBOM, or its source cannot be identified."
+                description = "The repository is not of type SBOM, its SBOM is only uploaded, or its source " +
+                    "cannot be identified."
             }
 
             HttpStatusCode.NotFound to {
@@ -116,6 +117,17 @@ internal fun Route.putRepositorySbomSource(
     requirePermission(RepositoryPermission.WRITE)
 ) {
     val repository = call.requireSbomRepository(repositoryService) ?: return@put
+
+    if (repository.isSbomUploadOnly) {
+        call.respondError(
+            HttpStatusCode.BadRequest,
+            "The SBOM of repository '${repository.id}' is only uploaded, so it has no source to identify. Change its " +
+                "URL to the URL of a source first."
+        )
+
+        return@put
+    }
+
     val request = runCatching { call.receive<PutRepositorySbomSource>() }.getOrDefault(PutRepositorySbomSource())
 
     try {
