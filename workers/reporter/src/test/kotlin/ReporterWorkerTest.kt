@@ -81,6 +81,7 @@ private const val ORGANIZATION_ID = 1L
 private const val REPORTER_JOB_ID = 1L
 private const val REPOSITORY_ID = 1L
 private const val ORT_RUN_ID = 12L
+private const val VCS_ID = 7L
 private const val TRACE_ID = "42"
 
 private val evaluatorJob = EvaluatorJob(
@@ -143,6 +144,9 @@ class ReporterWorkerTest : StringSpec({
             every { resolvedJobConfigContext } returns ""
             every { resolvedJobConfigs } returns null
             every { revision } returns "main"
+            every { vcsId } returns VCS_ID
+            every { vcsProcessedId } returns VCS_ID
+            every { nestedRepositoryIds } returns emptyMap()
         }
 
         every { analyzerRun.mapToOrt() } returns mockk()
@@ -271,6 +275,9 @@ class ReporterWorkerTest : StringSpec({
             every { resolvedJobConfigContext } returns ""
             every { resolvedJobConfigs } returns null
             every { revision } returns "main"
+            every { vcsId } returns VCS_ID
+            every { vcsProcessedId } returns VCS_ID
+            every { nestedRepositoryIds } returns emptyMap()
         }
 
         every { analyzerRun.mapToOrt() } returns mockk()
@@ -369,6 +376,9 @@ class ReporterWorkerTest : StringSpec({
             every { resolvedJobConfigContext } returns ""
             every { resolvedJobConfigs } returns null
             every { revision } returns "main"
+            every { vcsId } returns VCS_ID
+            every { vcsProcessedId } returns VCS_ID
+            every { nestedRepositoryIds } returns emptyMap()
         }
 
         every { analyzerRun.mapToOrt() } returns mockk()
@@ -466,6 +476,9 @@ class ReporterWorkerTest : StringSpec({
             every { resolvedJobConfigContext } returns ""
             every { resolvedJobConfigs } returns null
             every { revision } returns "main"
+            every { vcsId } returns VCS_ID
+            every { vcsProcessedId } returns VCS_ID
+            every { nestedRepositoryIds } returns emptyMap()
         }
 
         every { analyzerRun.mapToOrt() } returns mockk()
@@ -575,6 +588,7 @@ class ReporterWorkerTest : StringSpec({
             every { resolvedJobConfigContext } returns null
             every { resolvedJobConfigs } returns null
             every { revision } returns "main"
+            every { vcsId } returns null
         }
 
         val ortResult = mockk<OrtResult> {
@@ -608,6 +622,76 @@ class ReporterWorkerTest : StringSpec({
 
         coVerify {
             ortRunService.storeReporterRun(any())
+        }
+    }
+
+    "Reports should be created for a repository without VCS information, such as an SBOM repository" {
+        val ortRun = mockk<OrtRun> {
+            every { id } returns ORT_RUN_ID
+            every { labels } returns emptyMap()
+            every { organizationId } returns ORGANIZATION_ID
+            every { repositoryId } returns REPOSITORY_ID
+            every { resolvedJobConfigContext } returns ""
+            every { resolvedJobConfigs } returns null
+            every { revision } returns ""
+            every { vcsId } returns VCS_ID
+            every { vcsProcessedId } returns VCS_ID
+            every { nestedRepositoryIds } returns emptyMap()
+        }
+
+        // The repository of an SBOM repository without configuration is equal to Repository.EMPTY.
+        val ortResult = OrtTestData.result.copy(repository = Repository.EMPTY)
+
+        val ortRunService = mockk<OrtRunService>(relaxed = true) {
+            coEvery { getOrtRun(ORT_RUN_ID) } returns ortRun
+            coEvery { getReporterJob(REPORTER_JOB_ID) } returns reporterJob
+            coEvery { startReporterJob(REPORTER_JOB_ID) } returns reporterJob
+            coEvery { generateOrtResult(ortRun, failIfRepoInfoMissing = false) } returns ortResult
+            coEvery { getEvaluatorJobForOrtRun(ORT_RUN_ID) } returns evaluatorJob
+        }
+
+        val context = mockk<WorkerContext> {
+            every { this@mockk.configManager } returns mockConfigManager()
+            every { this@mockk.ortRun } returns ortRun
+        }
+
+        val environmentService = mockk<EnvironmentService> {
+            coEvery { setupAuthenticationForCurrentRun(context) } just runs
+        }
+
+        val runnerResult = ReporterRunnerResult(
+            reports = emptyMap(),
+            resolvedPackageConfigurations = null,
+            resolvedItems = null,
+            issues = emptyList(),
+            issuesWithHowToFix = emptyList()
+        )
+
+        val runner = mockk<ReporterRunner> {
+            coEvery {
+                run(ortResult, reporterJob.configuration, evaluatorJob.configuration, context)
+            } returns runnerResult
+        }
+
+        val worker = ReporterWorker(
+            mockContextFactory(context),
+            mockk(),
+            environmentService,
+            runner,
+            ortRunService,
+            mockk(),
+            mockk(relaxed = true),
+            mockIssueResolutionService()
+        )
+
+        mockkTransaction {
+            val result = worker.run(REPORTER_JOB_ID, TRACE_ID)
+
+            result shouldBe RunResult.Success
+        }
+
+        coVerify {
+            runner.run(ortResult, reporterJob.configuration, evaluatorJob.configuration, context)
         }
     }
 })
