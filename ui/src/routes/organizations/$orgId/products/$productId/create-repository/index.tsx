@@ -115,7 +115,9 @@ export const CreateRepositoryForm = ({
                       <FormDescription>
                         {sbomSource
                           ? `Source: ${getSbomSourceLabel(sbomSource)}. ORT Server confirms it with the server when the repository is created.`
-                          : 'The URL of a Dependency-Track project page, of a sbomify component or product page, or of an SBOM document.'}
+                          : 'The URL of a Dependency-Track project page, of a sbomify component or product page, or of an SBOM document.'}{' '}
+                        An SBOM can also be uploaded on the SBOM page of the
+                        repository once it is created.
                       </FormDescription>
                     )}
                     <FormMessage />
