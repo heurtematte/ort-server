@@ -107,10 +107,12 @@ The conversion is done by the `SBOM` package manager plugin, which is provided b
 
 - Each component the SBOM describes (the CycloneDX `metadata.component`, or the packages an SPDX document `DESCRIBES`) becomes a project of type `SBOM`.
   If the SBOM describes no component, a project named after the document is created.
-- All other components become packages.
+- All other components become packages, except files without a package URL.
   If a component has a package URL, the identifier of the package is derived from it, using the same types as the package managers of ORT (for instance `Maven`, `NPM`, or `PyPI`), and the package URL is kept as is.
   This allows advisors such as OSV, package curations, and rules to work on these packages.
   Components without a package URL get identifiers of type `SBOM`.
+- Files without a package URL, such as the files of container images that SBOMs created by Syft list as components of type `file`, are ignored, as advisors cannot identify them and the scanner cannot download them.
+  The components they depend on or contain take their place in the dependency graph.
 - The dependency graph of the SBOM is preserved.
   Nested CycloneDX components and SPDX `CONTAINS` relationships are treated as dependencies.
   Components that are not reachable from a described component are attached as direct dependencies of the project.
@@ -118,7 +120,8 @@ The conversion is done by the `SBOM` package manager plugin, which is provided b
   Scope excludes and includes of a run apply to them.
 - Declared licenses, copyrights, authors, hashes, download locations, and VCS information of components are mapped to the corresponding package properties.
   VCS URLs in the format of Maven SCM connections, such as `scm:git:git@github.com:org/repo.git`, are supported, including the path and the commit that Tycho adds from the `Eclipse-SourceReferences` of bundles.
-- If the SBOM gives no source artifact for a package, the plugin derives it from the package URL where the registry makes its location predictable: the sources JAR of Maven packages and the tarball of npm packages.
+  Local paths and values that are not URLs are ignored, so that an SBOM cannot make the scanner read local files.
+- If the SBOM gives no source artifact for a package, the plugin derives it from the package URL where the registry makes its location predictable: the sources JAR of Maven packages and the tarball of npm packages, or the `download_url` qualifier of npm package URLs.
 - Colons in the coordinates of components, such as in container image digests or Debian versions with an epoch, are encoded as `%3A` in the identifiers, because ORT does not allow them there; the package URLs keep the original values.
 - Invalid values that do not affect the analysis, such as a malformed timestamp of a CycloneDX BOM or a hash value of the wrong length, are ignored.
 
@@ -131,6 +134,7 @@ The plugin supports the following options, which can be set in the `packageManag
 | `definitionFilePatterns`       | see plugin | The file name patterns of SBOMs, see below.                                                                                                                                                                       |
 | `deriveSourceArtifacts`        | `true`     | Whether packages for which the SBOM gives no source artifact get the one derived from their package URL, so that the scanner can get their sources.                                                               |
 | `failFast`                     | `false`    | Whether the retrieval of the SBOMs listed by an SBOM source file of the plugin stops at the first source that cannot be retrieved. Runs of SBOM repositories always fail fast, see [Failing fast](#failing-fast). |
+| `includeFileComponents`        | `false`    | Whether files without a package URL, such as the files of container images, become packages.                                                                                                                      |
 
 For a repository of type SBOM, the SBOM is analyzed only by the `SBOM` package manager, whatever package managers are configured, so it does not need to be enabled for these runs or among the default plugins.
 When a run of such a repository is created, the package managers of its analyzer configuration are set to `SBOM`, and the options of other package managers are removed, so that the configuration of the run shows what is analyzed.
