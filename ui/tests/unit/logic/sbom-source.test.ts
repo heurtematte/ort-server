@@ -79,8 +79,15 @@ describe('SBOM source', () => {
     expect(detectSbomSource('upload:bom.cdx.json')).toBeUndefined();
   });
 
-  it('labels the URLs of uploaded SBOMs with the file name', () => {
-    expect(getSbomUploadUrl('bom.cdx.json')).toBe('upload:bom.cdx.json');
-    expect(getSbomUploadUrl(' ')).toBe('upload:sbom');
+  it('labels the URLs of uploaded SBOMs with the file name and the time', () => {
+    const date = new Date('2026-11-13T17:05:12.345Z');
+
+    expect(getSbomUploadUrl('bom.cdx.json', date)).toBe(
+      'upload:bom.cdx.json@2026-11-13T17:05:12Z'
+    );
+    expect(getSbomUploadUrl(' ', date)).toBe(
+      'upload:sbom@2026-11-13T17:05:12Z'
+    );
+    expect(isSbomUploadUrl(getSbomUploadUrl('bom.cdx.json'))).toBe(true);
   });
 });

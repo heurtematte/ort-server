@@ -85,7 +85,13 @@ export function isSbomUploadUrl(url: string): boolean {
   );
 }
 
-/** Return the URL of a repository whose SBOM is only uploaded, labeled with the file name. */
-export function getSbomUploadUrl(fileName: string): string {
-  return `${SBOM_UPLOAD_URL_PREFIX}${fileName.trim() || 'sbom'}`;
+/**
+ * Return the URL of a repository whose SBOM is only uploaded, labeled with the file name and the
+ * time of the upload, such as 'upload:bom.cdx.json@2026-11-13T17:05:12Z'. The time keeps the URLs
+ * of repositories created from files with the same name apart, as the URL and the name of a
+ * repository must be unique within a product.
+ */
+export function getSbomUploadUrl(fileName: string, date = new Date()): string {
+  const time = date.toISOString().replace(/\.\d{3}Z$/, 'Z');
+  return `${SBOM_UPLOAD_URL_PREFIX}${fileName.trim() || 'sbom'}@${time}`;
 }

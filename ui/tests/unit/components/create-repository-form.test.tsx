@@ -158,7 +158,7 @@ describe('CreateRepositoryForm', () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
     expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({
       type: 'SBOM',
-      url: 'upload:bom.cdx.json',
+      url: expect.stringMatching(/^upload:bom\.cdx\.json@\d{4}-\d{2}-\d{2}T/),
     });
     expect(onSubmit.mock.calls[0]?.[1]).toBe(file);
   });
