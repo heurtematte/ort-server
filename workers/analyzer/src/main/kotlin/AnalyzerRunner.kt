@@ -39,6 +39,7 @@ import org.eclipse.apoapsis.ortserver.shared.coroutines.Virtual
 import org.eclipse.apoapsis.ortserver.utils.config.getInterpolatedStringOrDefault
 import org.eclipse.apoapsis.ortserver.utils.config.getStringOrDefault
 import org.eclipse.apoapsis.ortserver.workers.common.env.EnvironmentForkHelper
+import org.eclipse.apoapsis.sbom.packagemanager.SbomFactory
 
 import org.ossreviewtoolkit.analyzer.Analyzer
 import org.ossreviewtoolkit.analyzer.determineEnabledPackageManagers
@@ -242,13 +243,24 @@ class AnalyzerRunner(
         val ortPackageManagerOptions =
             config.packageManagerOptions?.map { entry -> entry.key to entry.value.mapToOrt() }?.toMap()
 
-        val analyzerConfigFromJob = AnalyzerConfiguration(
-            config.allowDynamicVersions,
-            config.enabledPackageManagers ?: AnalyzerConfiguration().enabledPackageManagers,
-            config.disabledPackageManagers,
-            ortPackageManagerOptions,
-            config.skipExcluded ?: false
-        )
+        val analyzerConfigFromJob = if (config.sbomInput) {
+            // An SBOM is analyzed only by the SBOM package manager, regardless of the configured package managers.
+            AnalyzerConfiguration(
+                config.allowDynamicVersions,
+                listOf(SbomFactory.descriptor.id),
+                null,
+                ortPackageManagerOptions,
+                config.skipExcluded ?: false
+            )
+        } else {
+            AnalyzerConfiguration(
+                config.allowDynamicVersions,
+                config.enabledPackageManagers ?: AnalyzerConfiguration().enabledPackageManagers,
+                config.disabledPackageManagers,
+                ortPackageManagerOptions,
+                config.skipExcluded ?: false
+            )
+        }
 
         val repositoryConfigPath = config.repositoryConfigPath ?: ORT_REPO_CONFIG_FILENAME
         val repositoryConfigFile = inputDir.resolve(repositoryConfigPath)
@@ -263,7 +275,8 @@ class AnalyzerRunner(
             repositoryConfigFile.takeIf { it.isFile }?.readValueOrNull() ?: RepositoryConfiguration()
         ).withIncludesExcludes(config.includesExcludes)
 
-        val analyzerConfig = repositoryConfiguration.analyzer?.let { analyzerConfigFromJob.merge(it) }
+        val analyzerConfig = repositoryConfiguration.analyzer?.takeUnless { config.sbomInput }
+            ?.let { analyzerConfigFromJob.merge(it) }
             ?: analyzerConfigFromJob
 
         val analyzer = Analyzer(analyzerConfig)

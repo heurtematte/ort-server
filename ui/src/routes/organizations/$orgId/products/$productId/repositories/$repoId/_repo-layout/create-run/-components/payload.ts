@@ -35,17 +35,21 @@ import {
   createPackageManagerPayload,
   createPluginPayload,
   createProviderPluginPayload,
+  SBOM_PACKAGE_MANAGER_ID,
   UNMANAGED_PACKAGE_MANAGER_ID,
 } from './plugin-utils';
 import type { CreateRunFormValues } from './run-schema';
 
 /**
  * Due to API schema and requirements for the form schema, the form values can't be directly passed
- * to the API. This function converts form values to correct payload to create an ORT run.
+ * to the API. This function converts form values to correct payload to create an ORT run. For a
+ * repository of type SBOM, as indicated by [isSbomRepository], the SBOM package manager is the only
+ * enabled package manager, as it is the only one that analyzes its SBOM.
  */
 export function formValuesToPayload(
   values: CreateRunFormValues,
-  plugins: PreconfiguredPluginDescriptor[]
+  plugins: PreconfiguredPluginDescriptor[],
+  isSbomRepository = false
 ): PostRepositoryRun {
   //
   // Analyzer configuration
@@ -92,10 +96,12 @@ export function formValuesToPayload(
     ...(environmentConfig ? { environmentConfig } : {}),
     // Determine the enabled package managers by filtering the packageManagers object
     // and finding those for which 'enabled' is true.
-    enabledPackageManagers: [
-      ...values.jobConfigs.analyzer.packageManagers,
-      UNMANAGED_PACKAGE_MANAGER_ID,
-    ],
+    enabledPackageManagers: isSbomRepository
+      ? [SBOM_PACKAGE_MANAGER_ID]
+      : [
+          ...values.jobConfigs.analyzer.packageManagers,
+          UNMANAGED_PACKAGE_MANAGER_ID,
+        ],
     // Construct packageManagerOptions by including options for enabled package managers
     // that have options set in the form.
     packageManagerOptions: createPackageManagerPayload(

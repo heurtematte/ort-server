@@ -74,6 +74,7 @@ import org.eclipse.apoapsis.ortserver.model.RepositoryType
 import org.eclipse.apoapsis.ortserver.model.Secret
 import org.eclipse.apoapsis.ortserver.model.resolvedconfiguration.AppliedPackageCurationRef
 import org.eclipse.apoapsis.ortserver.model.resolvedconfiguration.ResolvedItemsResult
+import org.eclipse.apoapsis.ortserver.model.runs.AnalyzerRun
 import org.eclipse.apoapsis.ortserver.model.runs.Identifier
 import org.eclipse.apoapsis.ortserver.model.runs.Package
 import org.eclipse.apoapsis.ortserver.model.runs.PackageManagerConfiguration
@@ -94,6 +95,7 @@ import org.eclipse.apoapsis.ortserver.workers.common.env.EnvironmentService
 import org.eclipse.apoapsis.ortserver.workers.common.env.config.ResolvedEnvironmentConfig
 import org.eclipse.apoapsis.ortserver.workers.common.env.definition.SecretVariableDefinition
 import org.eclipse.apoapsis.ortserver.workers.common.env.definition.SimpleVariableDefinition
+import org.eclipse.apoapsis.sbom.parser.SbomFixtures
 
 import org.ossreviewtoolkit.model.Identifier as OrtIdentifier
 import org.ossreviewtoolkit.model.Issue
@@ -224,7 +226,7 @@ class AnalyzerWorkerTest : StringSpec({
                 mockIssueResolutionService()
             )
         )
-        val worker = AnalyzerWorker(downloader, AnalyzerRunner(ConfigFactory.empty()))
+        val worker = AnalyzerWorker(downloader, AnalyzerRunner(ConfigFactory.empty()), lazy { mockk() })
 
         mockkTransaction {
             val result = worker.testRun(phase)
@@ -287,7 +289,7 @@ class AnalyzerWorkerTest : StringSpec({
             mockk(relaxed = true),
             mockIssueResolutionService()
         )
-        val worker = AnalyzerWorker(downloader, AnalyzerRunner(ConfigFactory.empty()))
+        val worker = AnalyzerWorker(downloader, AnalyzerRunner(ConfigFactory.empty()), lazy { mockk() })
 
         mockkTransaction {
             val result = worker.testRun(phase)
@@ -305,6 +307,60 @@ class AnalyzerWorkerTest : StringSpec({
             coVerify {
                 envService.setUpEnvironment(context, projectDir, null, emptyList())
             }
+        }
+    }
+
+    "A repository of type SBOM should be analyzed from its SBOM" {
+        val sbomRepository = repository.copy(type = RepositoryType.SBOM, url = "https://example.com/sbom.json")
+        val sbomDir = tempdir()
+        SbomFixtures.copyTo(sbomDir, SbomFixtures.CYCLONEDX_1_4_JSON, "sbom.cdx.json")
+
+        val analyzerRun = slot<AnalyzerRun>()
+        val ortRunService = mockk<OrtRunService> {
+            coEvery { getAnalyzerJob(any()) } returns analyzerJob
+            coEvery { getHierarchyForOrtRun(any()) } returns Hierarchy(sbomRepository, mockk(), mockk())
+            coEvery { getOrtRun(any()) } returns ortRun
+            coEvery { startAnalyzerJob(any()) } returns analyzerJob
+            coEvery { storeAnalyzerRun(capture(analyzerRun), any()) } just runs
+            coEvery { storeRepositoryInformation(any(), any()) } just runs
+            coEvery { storeResolvedPackageCurations(any(), any()) } just runs
+            coEvery { storePackageCurationAssociations(any(), any()) } just runs
+            coEvery { storeResolvedItems(any(), any()) } just runs
+            coEvery { updateResolvedRevision(any(), any()) } just runs
+        }
+
+        val downloader = mockk<AnalyzerDownloader>()
+        val sbomDownloader = mockk<SbomDownloader> {
+            coEvery { download(sbomRepository, "main", null, null, null) } returns
+                    DownloadResult(sbomDir, "main", "sha256:0123")
+        }
+
+        val context = mockWorkerContext()
+        val envService = mockk<EnvironmentService> {
+            coEvery { findInfrastructureServicesForRepository(context, null) } returns emptyList()
+            coEvery { setUpEnvironment(context, sbomDir, null, emptyList()) } returns ResolvedEnvironmentConfig()
+        }
+
+        val phase = FullPhase(
+            mockk(),
+            ortRunService,
+            mockContextFactory(context),
+            envService,
+            mockk(relaxed = true),
+            mockIssueResolutionService()
+        )
+        val worker = AnalyzerWorker(downloader, AnalyzerRunner(ConfigFactory.empty()), lazy { sbomDownloader })
+
+        mockkTransaction {
+            worker.testRun(phase) shouldBe RunResult.Success
+
+            analyzerRun.captured.projects.map { it.identifier.toCoordinates() } shouldBe
+                    listOf("SBOM:org.eclipse.angus:imap:2.0.3")
+            analyzerRun.captured.packages.map { it.identifier.type }.toSet() shouldBe setOf("Maven")
+            analyzerRun.captured.packages.size shouldBe 4
+
+            coVerify { ortRunService.updateResolvedRevision(ortRun.id, "sha256:0123") }
+            verify(exactly = 0) { downloader.downloadRepository(any(), any(), any(), any(), any(), any()) }
         }
     }
 
@@ -350,7 +406,7 @@ class AnalyzerWorkerTest : StringSpec({
             mockk(relaxed = true),
             mockIssueResolutionService()
         )
-        val worker = AnalyzerWorker(downloader, AnalyzerRunner(ConfigFactory.empty()))
+        val worker = AnalyzerWorker(downloader, AnalyzerRunner(ConfigFactory.empty()), lazy { mockk() })
 
         mockkTransaction {
             val result = worker.testRun(phase)
@@ -423,7 +479,7 @@ class AnalyzerWorkerTest : StringSpec({
             mockk(relaxed = true),
             mockIssueResolutionService()
         )
-        val worker = AnalyzerWorker(downloader, runner)
+        val worker = AnalyzerWorker(downloader, runner, lazy { mockk() })
 
         mockkTransaction {
             when (val result = worker.testRun(phase)) {
@@ -481,7 +537,7 @@ class AnalyzerWorkerTest : StringSpec({
             mockk(relaxed = true),
             mockIssueResolutionService()
         )
-        val worker = AnalyzerWorker(downloader, runner)
+        val worker = AnalyzerWorker(downloader, runner, lazy { mockk() })
 
         mockkTransaction {
             when (val result = worker.testRun(phase)) {
@@ -571,7 +627,7 @@ class AnalyzerWorkerTest : StringSpec({
             mockk(relaxed = true),
             mockIssueResolutionService()
         )
-        val worker = AnalyzerWorker(downloader, runner)
+        val worker = AnalyzerWorker(downloader, runner, lazy { mockk() })
 
         mockkTransaction {
             when (val result = worker.testRun(phase)) {
@@ -597,7 +653,7 @@ class AnalyzerWorkerTest : StringSpec({
             mockk(relaxed = true),
             mockIssueResolutionService()
         )
-        val worker = AnalyzerWorker(mockk(), AnalyzerRunner(ConfigFactory.empty()))
+        val worker = AnalyzerWorker(mockk(), AnalyzerRunner(ConfigFactory.empty()), lazy { mockk() })
 
         mockkTransaction {
             when (val result = worker.testRun(phase)) {
@@ -621,7 +677,7 @@ class AnalyzerWorkerTest : StringSpec({
             mockk(relaxed = true),
             mockIssueResolutionService()
         )
-        val worker = AnalyzerWorker(mockk(), AnalyzerRunner(ConfigFactory.empty()))
+        val worker = AnalyzerWorker(mockk(), AnalyzerRunner(ConfigFactory.empty()), lazy { mockk() })
 
         mockkTransaction {
             val result = worker.testRun(phase)
@@ -716,7 +772,7 @@ class AnalyzerWorkerTest : StringSpec({
             mockk(relaxed = true),
             mockIssueResolutionService()
         )
-        val worker = AnalyzerWorker(downloader, runnerMock)
+        val worker = AnalyzerWorker(downloader, runnerMock, lazy { mockk() })
 
         mockkTransaction {
             val result = worker.testRun(phase)
@@ -803,7 +859,7 @@ class AnalyzerWorkerTest : StringSpec({
             mockk(relaxed = true),
             mockIssueResolutionService()
         )
-        val worker = AnalyzerWorker(downloader, runnerMock)
+        val worker = AnalyzerWorker(downloader, runnerMock, lazy { mockk() })
 
         mockkTransaction {
             val result = worker.testRun(phase)
@@ -855,7 +911,7 @@ class AnalyzerWorkerTest : StringSpec({
             mockk(relaxed = true),
             mockIssueResolutionService()
         )
-        val worker = AnalyzerWorker(downloader, runnerMock)
+        val worker = AnalyzerWorker(downloader, runnerMock, lazy { mockk() })
 
         mockkTransaction {
             val result = worker.testRun(phase)
@@ -921,7 +977,7 @@ class AnalyzerWorkerTest : StringSpec({
             mockk(relaxed = true),
             mockIssueResolutionService()
         )
-        val worker = AnalyzerWorker(downloader, runnerMock)
+        val worker = AnalyzerWorker(downloader, runnerMock, lazy { mockk() })
 
         mockkTransaction {
             val result = worker.testRun(phase)
@@ -986,7 +1042,7 @@ class AnalyzerWorkerTest : StringSpec({
             mockk(relaxed = true),
             mockIssueResolutionService()
         )
-        val worker = AnalyzerWorker(downloader, runnerMock)
+        val worker = AnalyzerWorker(downloader, runnerMock, lazy { mockk() })
 
         mockkTransaction {
             val result = worker.testRun(phase)
@@ -1048,7 +1104,7 @@ class AnalyzerWorkerTest : StringSpec({
             mockk(relaxed = true),
             mockIssueResolutionService()
         )
-        val worker = AnalyzerWorker(downloader, runnerMock)
+        val worker = AnalyzerWorker(downloader, runnerMock, lazy { mockk() })
 
         mockkTransaction {
             val result = worker.testRun(phase)
@@ -1123,7 +1179,7 @@ class AnalyzerWorkerTest : StringSpec({
             mockk(relaxed = true),
             mockIssueResolutionService()
         )
-        val worker = AnalyzerWorker(downloader, runnerMock)
+        val worker = AnalyzerWorker(downloader, runnerMock, lazy { mockk() })
 
         mockkTransaction {
             val result = worker.testRun(phase)
@@ -1176,7 +1232,7 @@ class AnalyzerWorkerTest : StringSpec({
             mockk(relaxed = true),
             mockIssueResolutionService()
         )
-        val worker = AnalyzerWorker(downloader, runnerMock)
+        val worker = AnalyzerWorker(downloader, runnerMock, lazy { mockk() })
 
         mockkTransaction {
             val result = worker.testRun(phase)
@@ -1257,7 +1313,7 @@ class AnalyzerWorkerTest : StringSpec({
                 )
             )
             val runner = mockk<AnalyzerRunner>()
-            val worker = AnalyzerWorker(downloader, runner)
+            val worker = AnalyzerWorker(downloader, runner, lazy { mockk() })
 
             mockkTransaction {
                 val result = worker.testRun(phase, arrayOf(exchangeDir.absolutePath))
@@ -1373,7 +1429,7 @@ class AnalyzerWorkerTest : StringSpec({
             every { EnvironmentForkHelper.setupAuthentication(any(), any()) } just runs
             every { Os.userHomeDirectory } returns userHomeDir
 
-            val worker = AnalyzerWorker(mockk(), runner)
+            val worker = AnalyzerWorker(mockk(), runner, lazy { mockk() })
             val phase = spyk(AnalysisPhase())
             worker.testRun(phase, arrayOf(exchangeDir.absolutePath)) shouldBe RunResult.Ignored
 
@@ -1430,7 +1486,7 @@ class AnalyzerWorkerTest : StringSpec({
             every { WorkerOrtConfig.create() } returns mockk(relaxed = true)
             every { EnvironmentForkHelper.setupAuthentication(any(), any()) } just runs
 
-            val worker = AnalyzerWorker(mockk(), runner)
+            val worker = AnalyzerWorker(mockk(), runner, lazy { mockk() })
             val result = worker.testRun(
                 AnalysisPhase(),
                 arrayOf(exchangeDir.absolutePath, syncFile.absolutePath)
@@ -1473,7 +1529,7 @@ class AnalyzerWorkerTest : StringSpec({
             every { WorkerOrtConfig.create() } returns mockk(relaxed = true)
             every { EnvironmentForkHelper.setupAuthentication(any(), any()) } just runs
 
-            val worker = AnalyzerWorker(mockk(), runner)
+            val worker = AnalyzerWorker(mockk(), runner, lazy { mockk() })
             val result = worker.testRun(
                 AnalysisPhase(),
                 arrayOf(exchangeDir.absolutePath, syncFile.absolutePath)
@@ -1530,7 +1586,7 @@ class AnalyzerWorkerTest : StringSpec({
                 mockIssueResolutionService()
             )
         )
-        val worker = AnalyzerWorker(mockk(), mockk())
+        val worker = AnalyzerWorker(mockk(), mockk(), lazy { mockk() })
 
         mockkTransaction {
             val result = worker.testRun(phase, arrayOf(exchangeDir.absolutePath))
@@ -1569,7 +1625,7 @@ class AnalyzerWorkerTest : StringSpec({
         }
 
         val phase = ResultPhase(mockk(), ortRunService, mockContextFactory(), mockk(), mockk())
-        val worker = AnalyzerWorker(mockk(), mockk())
+        val worker = AnalyzerWorker(mockk(), mockk(), lazy { mockk() })
 
         when (val result = worker.testRun(phase, arrayOf(exchangeDir.absolutePath))) {
             is RunResult.Failed -> result.error.message shouldBe "Analysis failed."

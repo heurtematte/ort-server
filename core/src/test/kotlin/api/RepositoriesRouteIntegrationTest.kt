@@ -74,6 +74,7 @@ import org.eclipse.apoapsis.ortserver.api.v1.model.JobSummaries
 import org.eclipse.apoapsis.ortserver.api.v1.model.Jobs
 import org.eclipse.apoapsis.ortserver.api.v1.model.NotifierJobConfiguration
 import org.eclipse.apoapsis.ortserver.api.v1.model.OrtRun
+import org.eclipse.apoapsis.ortserver.api.v1.model.PackageManagerConfiguration as ApiPackageManagerConfiguration
 import org.eclipse.apoapsis.ortserver.api.v1.model.PatchRepository
 import org.eclipse.apoapsis.ortserver.api.v1.model.PathExclude as ApiPathExclude
 import org.eclipse.apoapsis.ortserver.api.v1.model.PathExcludeReason as ApiPathExcludeReason
@@ -119,6 +120,7 @@ import org.eclipse.apoapsis.ortserver.model.RepositoryId
 import org.eclipse.apoapsis.ortserver.model.RepositoryType
 import org.eclipse.apoapsis.ortserver.model.SecretSource
 import org.eclipse.apoapsis.ortserver.model.repositories.OrtRunRepository
+import org.eclipse.apoapsis.ortserver.model.runs.PackageManagerConfiguration
 import org.eclipse.apoapsis.ortserver.model.runs.repository.PathExclude
 import org.eclipse.apoapsis.ortserver.model.runs.repository.PathInclude
 import org.eclipse.apoapsis.ortserver.model.runs.repository.PathIncludesExcludes
@@ -144,6 +146,7 @@ import org.eclipse.apoapsis.ortserver.transport.OrchestratorEndpoint
 import org.eclipse.apoapsis.ortserver.transport.testing.MessageSenderFactoryForTesting
 import org.eclipse.apoapsis.ortserver.utils.system.ORT_SERVER_VERSION
 import org.eclipse.apoapsis.ortserver.utils.test.Integration
+import org.eclipse.apoapsis.sbom.parser.SbomFixtures
 
 @Suppress("LargeClass")
 class RepositoriesRouteIntegrationTest : AbstractIntegrationTest({
@@ -358,6 +361,61 @@ class RepositoriesRouteIntegrationTest : AbstractIntegrationTest({
             }
         }
 
+        "not change the URL of a repository of type SBOM to a source that cannot be identified" {
+            integrationTestApplication {
+                val createdRepository = createRepository(type = RepositoryType.SBOM)
+
+                val response = superuserClient.patch("/api/v1/repositories/${createdRepository.id}") {
+                    setBody(
+                        PatchRepository(
+                            url = "http://127.0.0.1:1/projects/00000000-0000-0000-0000-000000000001".asPresent()
+                        )
+                    )
+                }
+
+                response shouldHaveStatus HttpStatusCode.BadRequest
+                response.bodyAsText() shouldContain "Could not identify the source of the SBOM"
+                superuserClient.get("/api/v1/repositories/${createdRepository.id}").body<Repository>().url shouldBe
+                    createdRepository.url
+            }
+        }
+
+        "change the URL of a repository of type SBOM to an upload URL and delete its source" {
+            integrationTestApplication {
+                val createdRepository = createRepository(type = RepositoryType.SBOM)
+                val repositoryPath = "/api/v1/repositories/${createdRepository.id}"
+
+                superuserClient.patch(repositoryPath) {
+                    setBody(PatchRepository(url = "https://example.com/releases/product.cdx.json".asPresent()))
+                } shouldHaveStatus HttpStatusCode.OK
+                superuserClient.get("$repositoryPath/sbom/source") shouldHaveStatus HttpStatusCode.OK
+
+                val response = superuserClient.patch(repositoryPath) {
+                    setBody(PatchRepository(url = "upload:bom.cdx.json".asPresent()))
+                }
+
+                response shouldHaveStatus HttpStatusCode.OK
+                response.body<Repository>().url shouldBe "upload:bom.cdx.json"
+                superuserClient.get("$repositoryPath/sbom/source") shouldHaveStatus HttpStatusCode.NotFound
+                superuserClient.put("$repositoryPath/sbom/source") shouldHaveStatus HttpStatusCode.BadRequest
+            }
+        }
+
+        "not change the URL of a repository of another type than SBOM to an upload URL" {
+            integrationTestApplication {
+                val createdRepository = createRepository(type = RepositoryType.GIT)
+
+                val response = superuserClient.patch("/api/v1/repositories/${createdRepository.id}") {
+                    setBody(PatchRepository(url = "upload:bom.cdx.json".asPresent()))
+                }
+
+                response shouldHaveStatus HttpStatusCode.BadRequest
+                response.bodyAsText() shouldContain "only valid for repositories of type SBOM"
+                superuserClient.get("/api/v1/repositories/${createdRepository.id}").body<Repository>().url shouldBe
+                    createdRepository.url
+            }
+        }
+
         "respond with 'Bad Request' if the repository's URL is malformed" {
             integrationTestApplication {
                 val createRepository = createRepository()
@@ -518,6 +576,23 @@ class RepositoriesRouteIntegrationTest : AbstractIntegrationTest({
                     HttpStatusCode.NoContent
 
                 productService.listRepositoriesForProduct(productId).data should beEmpty()
+            }
+        }
+
+        "delete the SBOM of a repository of type SBOM" {
+            integrationTestApplication {
+                val createdRepository = createRepository(type = RepositoryType.SBOM)
+                val sbomUrl = "/api/v1/repositories/${createdRepository.id}/sbom"
+
+                superuserClient.put(sbomUrl) {
+                    setBody(SbomFixtures.bytes(SbomFixtures.CYCLONEDX_1_4_JSON))
+                } shouldHaveStatus HttpStatusCode.OK
+                superuserClient.get(sbomUrl) shouldHaveStatus HttpStatusCode.OK
+
+                superuserClient.delete("/api/v1/repositories/${createdRepository.id}") shouldHaveStatus
+                    HttpStatusCode.NoContent
+
+                superuserClient.get(sbomUrl) shouldHaveStatus HttpStatusCode.NotFound
             }
         }
 
@@ -888,6 +963,49 @@ class RepositoriesRouteIntegrationTest : AbstractIntegrationTest({
                 run.jobConfigs.ruleSet shouldBe ruleSet
 
                 run.ortServerVersion shouldBe ORT_SERVER_VERSION
+            }
+        }
+
+        "restrict the analyzer of a run of an SBOM repository to the SBOM package manager" {
+            integrationTestApplication {
+                val createdRepository = createRepository(type = RepositoryType.SBOM)
+
+                val createRun = PostRepositoryRun(
+                    revision = "",
+                    jobConfigs = ApiJobConfigurations(
+                        AnalyzerJobConfiguration(
+                            allowDynamicVersions = true,
+                            enabledPackageManagers = listOf("Maven", "NPM", "Unmanaged"),
+                            disabledPackageManagers = listOf("Gradle"),
+                            packageManagerOptions = mapOf(
+                                "SBOM" to ApiPackageManagerConfiguration(
+                                    mustRunAfter = listOf("Maven"),
+                                    options = mapOf("failFast" to "true")
+                                ),
+                                "Maven" to ApiPackageManagerConfiguration(options = mapOf("option" to "value"))
+                            )
+                        )
+                    )
+                )
+
+                val response = superuserClient.post("/api/v1/repositories/${createdRepository.id}/runs") {
+                    setBody(createRun)
+                }
+
+                response shouldHaveStatus HttpStatusCode.Created
+                response.body<OrtRun>().jobConfigs.analyzer.enabledPackageManagers shouldBe listOf("SBOM")
+
+                val run = ortRunRepository.listForRepository(createdRepository.id).data.single()
+                MessageSenderFactoryForTesting.expectMessage(OrchestratorEndpoint)
+
+                with(run.jobConfigs.analyzer) {
+                    allowDynamicVersions shouldBe true
+                    enabledPackageManagers shouldBe listOf("SBOM")
+                    disabledPackageManagers shouldBe null
+                    packageManagerOptions shouldBe mapOf(
+                        "SBOM" to PackageManagerConfiguration(options = mapOf("failFast" to "true"))
+                    )
+                }
             }
         }
 

@@ -64,5 +64,11 @@ data class AnalyzerRunnerConfig(
      * The includes and excludes requested for the run, which are added to those from the repository configuration
      * file.
      */
-    val includesExcludes: RunIncludesExcludes? = null
+    val includesExcludes: RunIncludesExcludes? = null,
+
+    /**
+     * A flag whether the input of the analysis is an SBOM instead of source code. In this case, only the SBOM package
+     * manager is used.
+     */
+    val sbomInput: Boolean = false
 )

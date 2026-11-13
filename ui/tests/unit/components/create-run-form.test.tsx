@@ -789,6 +789,42 @@ describe('CreateRunForm', () => {
     expect(within(packageManagers).queryByText('Unmanaged')).toBeNull();
   });
 
+  it('offers only the locked SBOM package manager for an SBOM repository', async () => {
+    const sbomPlugin = createPluginDescriptor({
+      id: 'SBOM',
+      type: 'PACKAGE_MANAGER',
+      displayName: 'SBOM',
+    });
+    const { user } = renderCreateRunForm(vi.fn(), {
+      isSbomRepository: true,
+      plugins: [
+        advisorPlugin,
+        scannerPlugin,
+        ...packageManagerPlugins,
+        sbomPlugin,
+      ],
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Analyzer' }));
+
+    const packageManagers = screen
+      .getByText('Enabled package managers')
+      .closest<HTMLElement>('[data-slot="form-item"]')!;
+
+    expect(within(packageManagers).getByText('SBOM')).toBeVisible();
+    expect(within(packageManagers).queryByText('Maven')).toBeNull();
+    const checkbox = within(packageManagers).getByRole('checkbox', {
+      name: 'Enable SBOM',
+    });
+    expect(checkbox).toBeChecked();
+    expect(checkbox).toBeDisabled();
+
+    const payload = preview(await showPayload(user));
+    expect(payload.jobConfigs.analyzer.enabledPackageManagers).toEqual([
+      'SBOM',
+    ]);
+  });
+
   it('submits a scope exclude added from a typed pattern', async () => {
     const { onSubmit, user } = renderCreateRunForm();
 

@@ -41,4 +41,20 @@ data class Repository(
 
     /** The description of the repository. */
     val description: String? = null
-)
+) {
+    companion object {
+        /**
+         * The prefix of the URL of a repository of type [SBOM][RepositoryType.SBOM] whose SBOM is only uploaded, such
+         * as "upload:bom.cdx.json". Such a repository has no source to retrieve the SBOM from; the rest of the URL is
+         * only a label, such as the name of the uploaded file.
+         */
+        const val SBOM_UPLOAD_URL_PREFIX = "upload:"
+
+        /** Return whether the given [url] is the URL of a repository of type SBOM whose SBOM is only uploaded. */
+        fun isSbomUploadUrl(url: String): Boolean =
+            url.trim().let { it.length > SBOM_UPLOAD_URL_PREFIX.length && it.startsWith(SBOM_UPLOAD_URL_PREFIX) }
+    }
+
+    /** Whether this is a repository of type SBOM whose SBOM is only uploaded, so that it has no source. */
+    val isSbomUploadOnly: Boolean get() = type == RepositoryType.SBOM && isSbomUploadUrl(url)
+}

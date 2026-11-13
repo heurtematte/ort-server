@@ -33,6 +33,7 @@ import org.eclipse.apoapsis.ortserver.components.authorization.routes.Authorizat
 import org.eclipse.apoapsis.ortserver.components.authorization.service.InvalidHierarchyIdException
 import org.eclipse.apoapsis.ortserver.components.infrastructureservices.InvalidSecretReferenceException
 import org.eclipse.apoapsis.ortserver.components.reportstorage.ReportNotFoundException
+import org.eclipse.apoapsis.ortserver.components.sbom.SbomSourceIdentificationException
 import org.eclipse.apoapsis.ortserver.core.api.AuthenticationException
 import org.eclipse.apoapsis.ortserver.dao.QueryParametersException
 import org.eclipse.apoapsis.ortserver.dao.UniqueConstraintException
@@ -89,6 +90,13 @@ fun Application.configureStatusPages() {
         }
         exception<RequestValidationException> { call, e ->
             call.respondError(HttpStatusCode.BadRequest, "Request validation has failed.", e.message)
+        }
+        exception<SbomSourceIdentificationException> { call, e ->
+            call.respondError(
+                HttpStatusCode.BadRequest,
+                "Could not identify the source of the SBOM of the repository.",
+                e.message
+            )
         }
         exception<UniqueConstraintException> { call, e ->
             call.respondError(HttpStatusCode.Conflict, "The entity you tried to create already exists.", e.message)

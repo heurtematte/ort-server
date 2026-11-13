@@ -19,7 +19,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { createRepositoryFormSchema } from '@/schemas';
+import { createRepositoryFormSchema, repositoryFormSchema } from '@/schemas';
 
 const formValues = {
   description: '',
@@ -98,5 +98,39 @@ describe('createRepositoryFormSchema', () => {
     expect(result.error?.issues.map((issue) => issue.path)).toContainEqual([
       'url',
     ]);
+  });
+
+  it('accepts an upload URL only for a repository of type SBOM', () => {
+    const upload = { ...formValues, url: 'upload:bom.cdx.json' };
+
+    expect(
+      createRepositoryFormSchema.safeParse({ ...upload, type: 'SBOM' }).success
+    ).toBe(true);
+
+    const result = createRepositoryFormSchema.safeParse(upload);
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((issue) => issue.path)).toContainEqual([
+      'url',
+    ]);
+  });
+});
+
+describe('repositoryFormSchema', () => {
+  const values = {
+    description: '',
+    name: '',
+    type: 'SBOM' as const,
+    url: 'upload:bom.cdx.json',
+  };
+
+  it('accepts an upload URL for a repository of type SBOM', () => {
+    expect(repositoryFormSchema.safeParse(values).success).toBe(true);
+  });
+
+  it('rejects URLs that are neither HTTP(S) nor upload URLs', () => {
+    expect(
+      repositoryFormSchema.safeParse({ ...values, url: 'ftp://example.org' })
+        .success
+    ).toBe(false);
   });
 });

@@ -606,6 +606,68 @@ class ProductsRouteIntegrationTest : AbstractIntegrationTest({
             }
         }
 
+        "create a repository of type SBOM and store the identified source of its SBOM" {
+            integrationTestApplication {
+                val createdProduct = createProduct()
+                val url = "https://example.com/releases/product.cdx.json"
+
+                val response = superuserClient.post("/api/v1/products/${createdProduct.id}/repositories") {
+                    setBody(PostRepository(type = ApiRepositoryType.SBOM, url = url))
+                }
+
+                response shouldHaveStatus HttpStatusCode.Created
+                val repositoryId = response.body<Repository>().id
+
+                val source = superuserClient.get("/api/v1/repositories/$repositoryId/sbom/source")
+                source shouldHaveStatus HttpStatusCode.OK
+                source.bodyAsText() shouldContain "\"type\":\"DOCUMENT\""
+            }
+        }
+
+        "create a repository of type SBOM whose SBOM is only uploaded without identifying a source" {
+            integrationTestApplication {
+                val createdProduct = createProduct()
+
+                val response = superuserClient.post("/api/v1/products/${createdProduct.id}/repositories") {
+                    setBody(PostRepository(type = ApiRepositoryType.SBOM, url = "upload:bom.cdx.json"))
+                }
+
+                response shouldHaveStatus HttpStatusCode.Created
+                val repository = response.body<Repository>()
+                repository.url shouldBe "upload:bom.cdx.json"
+                superuserClient.get("/api/v1/repositories/${repository.id}/sbom/source") shouldHaveStatus
+                    HttpStatusCode.NotFound
+            }
+        }
+
+        "not accept an upload URL for a repository of another type than SBOM" {
+            integrationTestApplication {
+                val createdProduct = createProduct()
+
+                val response = superuserClient.post("/api/v1/products/${createdProduct.id}/repositories") {
+                    setBody(PostRepository(type = ApiRepositoryType.GIT, url = "upload:bom.cdx.json"))
+                }
+
+                response shouldHaveStatus HttpStatusCode.BadRequest
+                response.body<ErrorResponse>().cause shouldContain "Validation failed for PostRepository"
+            }
+        }
+
+        "not create a repository of type SBOM whose source cannot be identified" {
+            integrationTestApplication {
+                val createdProduct = createProduct()
+                val url = "http://127.0.0.1:1/projects/00000000-0000-0000-0000-000000000001"
+
+                val response = superuserClient.post("/api/v1/products/${createdProduct.id}/repositories") {
+                    setBody(PostRepository(type = ApiRepositoryType.SBOM, url = url))
+                }
+
+                response shouldHaveStatus HttpStatusCode.BadRequest
+                response.bodyAsText() shouldContain "Could not identify the source of the SBOM"
+                productService.listRepositoriesForProduct(createdProduct.id).totalCount shouldBe 0
+            }
+        }
+
         "create repositories with the same url if their names differ" {
             integrationTestApplication {
                 val createdProduct = createProduct()

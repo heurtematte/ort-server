@@ -96,6 +96,12 @@ dependencies {
             requireCapability("$group:routes:$version")
         }
     }
+    implementation(projects.components.sbom.sbomBackend)
+    implementation(projects.components.sbom.sbomBackend) {
+        capabilities {
+            requireCapability("$group:routes:$version")
+        }
+    }
     implementation(projects.components.search.searchBackend)
     implementation(projects.components.search.searchBackend) {
         capabilities {
@@ -172,6 +178,7 @@ dependencies {
     testImplementation(testFixtures(projects.clients.keycloak))
     testImplementation(testFixtures(projects.config.configSpi))
     testImplementation(testFixtures(projects.dao))
+    testImplementation(testFixtures(libs.sbom.parser))
     testImplementation(testFixtures(projects.logaccess.logaccessSpi))
     testImplementation(testFixtures(projects.secrets.secretsSpi))
     testImplementation(testFixtures(projects.shared.ktorUtils))

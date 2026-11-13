@@ -52,12 +52,16 @@ dependencies {
     implementation(projects.components.adminConfig.adminConfigBackend)
     implementation(projects.components.authorization.authorizationBackend)
     implementation(projects.components.resolutions.resolutionsBackend)
+    implementation(projects.components.sbom.sbomBackend)
     implementation(projects.dao)
     implementation(projects.model)
     implementation(projects.services.hierarchyService)
     implementation(projects.services.ortRunService)
     implementation(projects.shared.coroutines)
     implementation(projects.shared.packageCurationProviders)
+    implementation(libs.sbom.packageManager)
+    implementation(libs.sbom.parser)
+    implementation(libs.sbom.sources)
     implementation(projects.transport.transportSpi)
     implementation(projects.utils.config)
     implementation(projects.utils.logging)
@@ -84,6 +88,9 @@ dependencies {
     testImplementation(projects.components.secrets.secretsBackend)
     testImplementation(projects.shared.ortTestData)
 
+    testImplementation(testFixtures(libs.sbom.parser))
+    testImplementation(testFixtures(projects.storage.storageSpi))
+
     testImplementation(testFixtures(projects.config.configSpi))
     testImplementation(testFixtures(projects.dao))
     testImplementation(testFixtures(projects.secrets.secretsSpi))
@@ -93,6 +100,7 @@ dependencies {
     testImplementation(libs.koin.test)
     testImplementation(libs.kotest.runner.junit5)
     testImplementation(libs.mockk)
+    testImplementation(libs.wiremock)
 }
 
 tinyJib {

@@ -9,6 +9,10 @@ concurrency:
   group: "pages"
   cancel-in-progress: false
 
+env:
+  # Gradle reads the ORT SBOM plugin from GitHub Packages, which requires a token also for public packages.
+  GITHUB_TOKEN: ${{ github.token }}
+
 jobs:
   build:
     if: github.repository == 'eclipse-apoapsis/ort-server'

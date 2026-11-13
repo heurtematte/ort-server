@@ -106,6 +106,7 @@ describe('repository credentials', () => {
       GIT_REPO: [],
       MERCURIAL: [],
       SUBVERSION: [],
+      SBOM: [],
     });
   });
 

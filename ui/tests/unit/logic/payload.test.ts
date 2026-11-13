@@ -369,6 +369,23 @@ describe('formValuesToPayload', () => {
     expect(payload.jobConfigs.analyzer?.packageManagerOptions).toBeUndefined();
   });
 
+  it('enables only the SBOM package manager for an SBOM repository', () => {
+    const values = createFormValues();
+    values.jobConfigs.analyzer.packageManagers = ['SBOM'];
+    values.jobConfigs.analyzer.packageManagerConfig = {
+      SBOM: { options: { failFast: true }, secrets: {} },
+    };
+
+    const payload = formValuesToPayload(values, [], true);
+
+    expect(payload.jobConfigs.analyzer?.enabledPackageManagers).toEqual([
+      'SBOM',
+    ]);
+    expect(payload.jobConfigs.analyzer?.packageManagerOptions).toEqual({
+      SBOM: { options: { failFast: 'true' } },
+    });
+  });
+
   it('omits package manager configurations without options or mustRunAfter', () => {
     const values = createFormValues();
     values.jobConfigs.analyzer.packageManagers = ['Maven'];
