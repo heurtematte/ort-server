@@ -19,7 +19,12 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { detectSbomSource, getSbomSourceLabel } from '@/lib/sbom-source';
+import {
+  detectSbomSource,
+  getSbomSourceLabel,
+  getSbomUploadUrl,
+  isSbomUploadUrl,
+} from '@/lib/sbom-source';
 
 describe('SBOM source', () => {
   it('detects Dependency-Track projects from the URL of their page', () => {
@@ -64,5 +69,18 @@ describe('SBOM source', () => {
     expect(getSbomSourceLabel('DEPENDENCY_TRACK_PROJECT')).toBe(
       'Dependency-Track project'
     );
+  });
+
+  it('recognizes the URLs of repositories whose SBOM is only uploaded', () => {
+    expect(isSbomUploadUrl('upload:bom.cdx.json')).toBe(true);
+    expect(isSbomUploadUrl(' upload:bom.cdx.json ')).toBe(true);
+    expect(isSbomUploadUrl('upload:')).toBe(false);
+    expect(isSbomUploadUrl('https://example.org/bom.cdx.json')).toBe(false);
+    expect(detectSbomSource('upload:bom.cdx.json')).toBeUndefined();
+  });
+
+  it('labels the URLs of uploaded SBOMs with the file name', () => {
+    expect(getSbomUploadUrl('bom.cdx.json')).toBe('upload:bom.cdx.json');
+    expect(getSbomUploadUrl(' ')).toBe('upload:sbom');
   });
 });

@@ -56,6 +56,7 @@ import {
   SBOM_FILE_ACCEPT,
   uploadRepositorySbom,
 } from '@/lib/repository-sbom';
+import { isSbomUploadUrl } from '@/lib/sbom-source';
 import { toast, toastError } from '@/lib/toast';
 
 const Property = ({
@@ -87,6 +88,8 @@ const RepositorySbomPage = () => {
   });
 
   const isSbomRepository = repository.type === 'SBOM';
+  // A repository whose URL is an upload URL has no source to fall back to.
+  const isUploadOnly = isSbomUploadUrl(repository.url);
   const sbomQueryKey = getRepositorySbomQueryKey({ path: { repositoryId } });
 
   const {
@@ -120,8 +123,9 @@ const RepositorySbomPage = () => {
     async onSuccess() {
       await queryClient.resetQueries({ queryKey: sbomQueryKey });
       toast.info('Delete SBOM', {
-        description:
-          'The uploaded SBOM was deleted. Runs analyze the SBOM of the repository URL again.',
+        description: isUploadOnly
+          ? 'The uploaded SBOM was deleted. Upload another one to analyze this repository.'
+          : 'The uploaded SBOM was deleted. Runs analyze the SBOM of the repository URL again.',
       });
     },
     onError(error: ApiError) {
@@ -174,12 +178,17 @@ const RepositorySbomPage = () => {
       <CardContent className='flex flex-col gap-6'>
         {isPending && <LoadingIndicator />}
 
-        {noSbom && (
-          <div className='text-muted-foreground'>
-            No SBOM was uploaded. Runs analyze the SBOM of the repository URL,{' '}
-            <span className='break-all'>{repository.url}</span>.
-          </div>
-        )}
+        {noSbom &&
+          (isUploadOnly ? (
+            <div className='text-muted-foreground'>
+              No SBOM was uploaded yet. Upload one to analyze this repository.
+            </div>
+          ) : (
+            <div className='text-muted-foreground'>
+              No SBOM was uploaded. Runs analyze the SBOM of the repository URL,{' '}
+              <span className='break-all'>{repository.url}</span>.
+            </div>
+          ))}
 
         {error && !noSbom && (
           <div className='text-destructive'>
@@ -250,7 +259,11 @@ const RepositorySbomPage = () => {
               </Button>
               <DeleteDialog
                 thingName='uploaded SBOM'
-                description='Runs started afterwards analyze the SBOM of the repository URL again.'
+                description={
+                  isUploadOnly
+                    ? 'Runs fail until another SBOM is uploaded.'
+                    : 'Runs started afterwards analyze the SBOM of the repository URL again.'
+                }
                 uiComponent={
                   <Button variant='destructive' disabled={remove.isPending}>
                     Delete SBOM

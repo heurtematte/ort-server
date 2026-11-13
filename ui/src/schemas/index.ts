@@ -27,6 +27,7 @@ import {
   zVulnerabilityRating,
 } from '@/api/zod.gen';
 import { asOptionalField } from '@/components/form/as-optional-field';
+import { isSbomUploadUrl } from '@/lib/sbom-source';
 
 export const createUserFormSchema = z.object({
   username: z.string().trim().min(1),
@@ -40,17 +41,42 @@ export const createUserFormSchema = z.object({
 
 export type CreateUserFormValues = z.infer<typeof createUserFormSchema>;
 
-export const repositoryFormSchema = zRepository
+const repositoryUrlSchema = z.url({ protocol: /^https?$/ });
+
+const repositoryFieldsSchema = zRepository
   .pick({
     description: true,
     name: true,
     type: true,
   })
-  .extend({ url: z.url({ protocol: /^https?$/ }) });
+  .extend({ url: z.string() });
+
+/**
+ * Check that the URL of a repository is an HTTP(S) URL or, for a repository of type SBOM whose
+ * SBOM is only uploaded, an upload URL.
+ */
+function checkRepositoryUrl(
+  values: { type: string; url: string },
+  ctx: z.RefinementCtx
+) {
+  if (values.type === 'SBOM' && isSbomUploadUrl(values.url)) return;
+
+  const result = repositoryUrlSchema.safeParse(values.url);
+  if (!result.success) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['url'],
+      message: result.error.issues[0]?.message ?? 'Invalid URL',
+    });
+  }
+}
+
+export const repositoryFormSchema =
+  repositoryFieldsSchema.superRefine(checkRepositoryUrl);
 
 export type RepositoryFormValues = z.infer<typeof repositoryFormSchema>;
 
-export const createRepositoryFormSchema = repositoryFormSchema
+export const createRepositoryFormSchema = repositoryFieldsSchema
   .extend({
     username: z
       .string()
@@ -65,6 +91,8 @@ export const createRepositoryFormSchema = repositoryFormSchema
       }),
   })
   .superRefine((values, ctx) => {
+    checkRepositoryUrl(values, ctx);
+
     if (values.username && !values.password) {
       ctx.addIssue({
         code: 'custom',

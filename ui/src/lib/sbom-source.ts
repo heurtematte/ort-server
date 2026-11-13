@@ -69,3 +69,23 @@ export const SBOM_REVISION_DESCRIPTION =
   "The version of the Dependency-Track project or sbomify component to analyze, or 'latest'. " +
   'Leave it empty to analyze the version of the repository URL. A revision cannot be used for ' +
   'SBOM documents.';
+
+/**
+ * The prefix of the URL of a repository of type SBOM whose SBOM is only uploaded, such as
+ * 'upload:bom.cdx.json'. Such a repository has no source; the rest of the URL is only a label.
+ */
+export const SBOM_UPLOAD_URL_PREFIX = 'upload:';
+
+/** Return whether the given URL is the URL of a repository whose SBOM is only uploaded. */
+export function isSbomUploadUrl(url: string): boolean {
+  const trimmed = url.trim();
+  return (
+    trimmed.length > SBOM_UPLOAD_URL_PREFIX.length &&
+    trimmed.startsWith(SBOM_UPLOAD_URL_PREFIX)
+  );
+}
+
+/** Return the URL of a repository whose SBOM is only uploaded, labeled with the file name. */
+export function getSbomUploadUrl(fileName: string): string {
+  return `${SBOM_UPLOAD_URL_PREFIX}${fileName.trim() || 'sbom'}`;
+}

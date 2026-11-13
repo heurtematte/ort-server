@@ -21,7 +21,9 @@ import { AxiosError, AxiosHeaders } from 'axios';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getRepositorySbomContent, putRepositorySbom } from '@/api/sdk.gen';
+import { createRepositoryAndCredentials } from '@/lib/repository-credentials';
 import {
+  createRepositoryWithSbom,
   fetchRepositorySbomContent,
   isSbomNotFound,
   uploadRepositorySbom,
@@ -30,6 +32,10 @@ import {
 vi.mock('@/api/sdk.gen', () => ({
   getRepositorySbomContent: vi.fn(),
   putRepositorySbom: vi.fn(),
+}));
+
+vi.mock('@/lib/repository-credentials', () => ({
+  createRepositoryAndCredentials: vi.fn(),
 }));
 
 const storedSbom = {
@@ -56,6 +62,7 @@ describe('repository SBOM', () => {
   beforeEach(() => {
     vi.mocked(putRepositorySbom).mockReset();
     vi.mocked(getRepositorySbomContent).mockReset();
+    vi.mocked(createRepositoryAndCredentials).mockReset();
   });
 
   it('uploads the file as the raw body with its name', async () => {
@@ -105,5 +112,64 @@ describe('repository SBOM', () => {
     expect(isSbomNotFound(axiosError(500))).toBe(false);
     expect(isSbomNotFound(new Error('Network Error'))).toBe(false);
     expect(isSbomNotFound(undefined)).toBe(false);
+  });
+
+  describe('createRepositoryWithSbom', () => {
+    const repository = {
+      id: 7,
+      organizationId: 1,
+      productId: 2,
+      type: 'SBOM' as const,
+      url: 'upload:bom.cdx.json',
+    };
+    const values = {
+      description: '',
+      name: '',
+      type: 'SBOM' as const,
+      url: 'upload:bom.cdx.json',
+      username: '',
+      password: '',
+    };
+
+    beforeEach(() => {
+      vi.mocked(createRepositoryAndCredentials).mockResolvedValue({
+        repository,
+      });
+    });
+
+    it('only creates the repository without a file', async () => {
+      expect(await createRepositoryWithSbom(2, values)).toEqual({
+        repository,
+      });
+      expect(putRepositorySbom).not.toHaveBeenCalled();
+    });
+
+    it('uploads the file once the repository is created', async () => {
+      vi.mocked(putRepositorySbom).mockResolvedValue({
+        data: storedSbom,
+      } as unknown as Awaited<ReturnType<typeof putRepositorySbom>>);
+      const file = new File(['{}'], 'bom.cdx.json');
+
+      expect(await createRepositoryWithSbom(2, values, file)).toEqual({
+        repository,
+        sbomUploaded: true,
+      });
+      expect(createRepositoryAndCredentials).toHaveBeenCalledWith({
+        productId: 2,
+        values,
+      });
+      expect(vi.mocked(putRepositorySbom).mock.calls[0]?.[0].path).toEqual({
+        repositoryId: 7,
+      });
+    });
+
+    it('returns the error of a failed upload with the created repository', async () => {
+      const error = axiosError(400);
+      vi.mocked(putRepositorySbom).mockRejectedValue(error);
+
+      expect(
+        await createRepositoryWithSbom(2, values, new File(['x'], 'x.txt'))
+      ).toEqual({ repository, sbomError: error });
+    });
   });
 });

@@ -21,6 +21,11 @@ import { AxiosError } from 'axios';
 
 import type { PutRepositorySbomData, RepositorySbom } from '@/api';
 import { getRepositorySbomContent, putRepositorySbom } from '@/api/sdk.gen';
+import {
+  createRepositoryAndCredentials,
+  type CreateRepositoryResult,
+} from '@/lib/repository-credentials';
+import type { CreateRepositoryFormValues } from '@/schemas';
 
 /**
  * The file types offered when choosing an SBOM to upload. ORT Server detects the format from the
@@ -88,4 +93,30 @@ export function saveBlob(blob: Blob, fileName: string): void {
   anchor.download = fileName;
   anchor.click();
   window.URL.revokeObjectURL(url);
+}
+
+/** The result of adding a repository, together with the upload of its SBOM if one was chosen. */
+export type CreateRepositoryWithSbomResult = CreateRepositoryResult & {
+  sbomUploaded?: boolean;
+  sbomError?: unknown;
+};
+
+/**
+ * Create a repository in the product with the given ID and, if a file is given, upload it as the
+ * SBOM of the repository. A failed upload is returned, as the repository exists anyway.
+ */
+export async function createRepositoryWithSbom(
+  productId: number,
+  values: CreateRepositoryFormValues,
+  sbomFile?: File
+): Promise<CreateRepositoryWithSbomResult> {
+  const result = await createRepositoryAndCredentials({ productId, values });
+  if (!sbomFile) return result;
+
+  try {
+    await uploadRepositorySbom(result.repository.id, sbomFile);
+    return { ...result, sbomUploaded: true };
+  } catch (error) {
+    return { ...result, sbomError: error };
+  }
 }

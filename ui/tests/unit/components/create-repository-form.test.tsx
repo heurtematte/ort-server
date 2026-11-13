@@ -133,4 +133,33 @@ describe('CreateRepositoryForm', () => {
       username: 'jdoe',
     });
   });
+
+  it('uploads an SBOM file instead of a URL for a repository of type SBOM', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+
+    render(<CreateRepositoryForm isPending={false} onSubmit={onSubmit} />);
+
+    await user.click(screen.getByRole('combobox'));
+    await user.click(screen.getByRole('option', { name: 'SBOM' }));
+    await user.click(screen.getByLabelText('Upload a file'));
+
+    expect(screen.queryByLabelText('URL')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Username')).not.toBeInTheDocument();
+
+    const createButton = screen.getByRole('button', { name: 'Add' });
+    expect(createButton).toBeDisabled();
+
+    const file = new File(['{}'], 'bom.cdx.json', { type: 'application/json' });
+    await user.upload(screen.getByLabelText('SBOM file'), file);
+    await waitFor(() => expect(createButton).toBeEnabled());
+    await user.click(createButton);
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({
+      type: 'SBOM',
+      url: 'upload:bom.cdx.json',
+    });
+    expect(onSubmit.mock.calls[0]?.[1]).toBe(file);
+  });
 });

@@ -24,7 +24,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Repository } from '@/api';
 import type { ApiError } from '@/lib/api-error';
-import type { CreateRepositoryResult } from '@/lib/repository-credentials';
+import type { CreateRepositoryWithSbomResult } from '@/lib/repository-sbom';
 import { CreateRepositoryPage } from '@/routes/organizations/$orgId/products/$productId/create-repository';
 
 const mocks = vi.hoisted(() => ({
@@ -63,7 +63,7 @@ vi.mock('@/lib/toast', () => ({
 }));
 
 type MutationOptions = {
-  onSuccess: (result: CreateRepositoryResult) => void;
+  onSuccess: (result: CreateRepositoryWithSbomResult) => void;
   onError: (error: ApiError) => void;
 };
 
@@ -132,5 +132,39 @@ describe('CreateRepositoryPage', () => {
     expect(mocks.toastError).toHaveBeenCalledWith(error.message, error);
     expect(mocks.repositoryCreated).not.toHaveBeenCalled();
     expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it('shows the SBOM page after uploading the SBOM of a new repository', () => {
+    getMutationOptions().onSuccess({ repository, sbomUploaded: true });
+
+    expect(mocks.toastInfo).toHaveBeenCalledWith('Add Repository', {
+      description: `Repository ${repository.url} added successfully with its SBOM.`,
+    });
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: '/organizations/$orgId/products/$productId/repositories/$repoId/sbom',
+      params: {
+        orgId: '1',
+        productId: '2',
+        repoId: repository.id.toString(),
+      },
+    });
+  });
+
+  it('reports an SBOM that could not be uploaded and shows the SBOM page', () => {
+    const error = new Error('The uploaded file is not a valid SBOM.');
+
+    getMutationOptions().onSuccess({ repository, sbomError: error });
+
+    expect(mocks.repositoryCreated).toHaveBeenCalledOnce();
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      `Repository ${repository.url} was added, but its SBOM could not be uploaded. ` +
+        'Upload it again on the SBOM page of the repository.',
+      error
+    );
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: '/organizations/$orgId/products/$productId/repositories/$repoId/sbom',
+      })
+    );
   });
 });
