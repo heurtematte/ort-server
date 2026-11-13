@@ -24,11 +24,18 @@ package org.eclipse.apoapsis.ortserver.dao
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 
+import java.sql.SQLException
+
 import javax.sql.DataSource
 
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.random.Random
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 import org.eclipse.apoapsis.ortserver.shared.coroutines.Virtual
@@ -184,6 +191,73 @@ fun <T> Result<T>.getEntityOrNull() = getOrElse {
         else -> throw it
     }
 }
+
+/** The default number of attempts of [Database.transactionWithRetry]. */
+private const val DEFAULT_TRANSACTION_ATTEMPTS = 5
+
+/** The default maximum delay before the first retry of [Database.transactionWithRetry]. */
+private val DEFAULT_TRANSACTION_RETRY_DELAY = 2.seconds
+
+/** The maximum number of causes of an exception that are checked, to protect against cycles. */
+private const val MAX_EXCEPTION_CAUSES = 20
+
+/** The SQL states of failures caused by a concurrent transaction, after which a transaction can succeed if retried. */
+private val CONCURRENT_TRANSACTION_SQL_STATES = setOf(
+    PostgresErrorCodes.DEADLOCK_DETECTED.value,
+    PostgresErrorCodes.SERIALIZATION_FAILURE.value,
+    PostgresErrorCodes.UNIQUE_CONSTRAINT_VIOLATION.value
+)
+
+/**
+ * Execute the [block] in a database transaction like [Database.transaction], and retry it up to [maxAttempts] times in
+ * total if it fails because of a concurrent transaction: a deadlock, a serialization failure, or a unique constraint
+ * violation because a concurrent transaction inserted the same row first. This happens when concurrent transactions
+ * get or create the same shared entities, such as identifiers, VCS information, or remote artifacts, for instance when
+ * the results of many runs are stored at the same time. Exposed already repeats a failed transaction, but immediately,
+ * while the concurrent transactions are still running, so that it fails again. Therefore, wait for a random delay of up
+ * to [maxDelay] times the number of failed attempts before each retry, so that the transactions do not collide again.
+ *
+ * The transaction is rolled back after such a failure, so retrying it is safe as long as the [block] only changes the
+ * database. As a nested call runs in the transaction of its caller, which the failure aborts, this function must be
+ * called outside of other transactions.
+ */
+suspend fun <T> Database.transactionWithRetry(
+    maxAttempts: Int = DEFAULT_TRANSACTION_ATTEMPTS,
+    maxDelay: Duration = DEFAULT_TRANSACTION_RETRY_DELAY,
+    block: suspend JdbcTransaction.() -> T
+): T {
+    require(maxAttempts > 0) { "The number of attempts must be positive, but is $maxAttempts." }
+
+    var attempt = 1
+
+    while (true) {
+        val result = transactionCatching(block = block)
+        val failure = result.exceptionOrNull()
+
+        if (failure == null || attempt >= maxAttempts || !failure.isCausedByConcurrentTransaction()) {
+            return result.getOrThrow()
+        }
+
+        logger.warn(
+            "Transaction failed because of a concurrent transaction, starting attempt {} of {}: {}",
+            attempt + 1,
+            maxAttempts,
+            failure.message?.lineSequence()?.firstOrNull()
+        )
+
+        delay(Random.nextLong(maxDelay.inWholeMilliseconds * attempt + 1).milliseconds)
+        attempt++
+    }
+}
+
+/** Return whether this exception or one of its causes is a failure caused by a concurrent transaction. */
+private fun Throwable.isCausedByConcurrentTransaction(): Boolean =
+    generateSequence(this) { it.cause }.take(MAX_EXCEPTION_CAUSES).filterIsInstance<SQLException>().any { exception ->
+        // Failed batches report the failure of each statement as the next exception.
+        generateSequence(exception) { it.nextException }.take(MAX_EXCEPTION_CAUSES).any {
+            it.sqlState in CONCURRENT_TRANSACTION_SQL_STATES
+        }
+    }
 
 /** Map the generic database exceptions to more specific exceptions. */
 internal fun <T> Result<T>.mapExceptions(): Result<T> =
