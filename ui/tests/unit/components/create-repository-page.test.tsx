@@ -124,6 +124,21 @@ describe('CreateRepositoryPage', () => {
     expect(mocks.navigate).toHaveBeenCalledOnce();
   });
 
+  it('explains that a repository with the same URL and name exists', () => {
+    const error = {
+      message: 'Request failed with status code 409',
+      response: { status: 409 },
+    } as ApiError;
+
+    getMutationOptions().onError(error);
+
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      'A repository with the same URL and name already exists in this product.',
+      error
+    );
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
   it('reports a repository creation error without updating the cache', () => {
     const error = new Error('Could not create the repository.') as ApiError;
 

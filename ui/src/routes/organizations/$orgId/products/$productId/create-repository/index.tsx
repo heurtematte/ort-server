@@ -404,7 +404,14 @@ export const CreateRepositoryPage = () => {
       }
     },
     onError(error: ApiError) {
-      toastError(error.message, error);
+      if (error.response?.status === 409) {
+        toastError(
+          'A repository with the same URL and name already exists in this product.',
+          error
+        );
+      } else {
+        toastError(error.message, error);
+      }
     },
   });
 
