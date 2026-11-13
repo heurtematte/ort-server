@@ -26,7 +26,8 @@ Documents of versions that have not been tested, such as a future CycloneDX vers
 The SBOM of a repository is obtained from the first of the following sources that is available:
 
 1. **An uploaded SBOM.**
-   Upload it with `PUT /api/v1/repositories/{repositoryId}/sbom`, either as the raw request body or as the first file of a `multipart/form-data` request.
+   Upload it on the **SBOM** page of the repository in the UI, which also shows information about the uploaded SBOM and lets you download, replace, or delete it.
+   With the API, upload it with `PUT /api/v1/repositories/{repositoryId}/sbom`, either as the raw request body or as the first file of a `multipart/form-data` request.
    The SBOM is validated before it is stored; uploading a new SBOM replaces the previous one.
    `GET /api/v1/repositories/{repositoryId}/sbom` returns information about the uploaded SBOM, `GET .../sbom/content` returns the SBOM itself, and `DELETE .../sbom` deletes it.
 2. **The source of the repository URL**, identified when the repository was created:
