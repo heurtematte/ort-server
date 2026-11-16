@@ -24,7 +24,7 @@ import {
   useSuspenseQuery,
 } from '@tanstack/react-query';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { Download, Upload } from 'lucide-react';
+import { CircleSlash, Download, Upload } from 'lucide-react';
 import { useRef, type ChangeEvent, type ReactNode } from 'react';
 
 import {
@@ -32,9 +32,9 @@ import {
   getRepositoryOptions,
   getRepositorySbomOptions,
   getRepositorySbomQueryKey,
+  getRepositorySbomVersionsQueryKey,
 } from '@/api/@tanstack/react-query.gen';
 import { withRepositoryPermission } from '@/components/authorization';
-import { DeleteDialog } from '@/components/delete-dialog';
 import { LoadingIndicator } from '@/components/loading-indicator';
 import { TimestampWithUTC } from '@/components/timestamp-with-utc';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -58,6 +58,7 @@ import {
 } from '@/lib/repository-sbom';
 import { isSbomUploadUrl } from '@/lib/sbom-source';
 import { toast, toastError } from '@/lib/toast';
+import { SbomHistory } from './-components/sbom-history';
 
 const Property = ({
   label,
@@ -91,6 +92,9 @@ const RepositorySbomPage = () => {
   // A repository whose URL is an upload URL has no source to fall back to.
   const isUploadOnly = isSbomUploadUrl(repository.url);
   const sbomQueryKey = getRepositorySbomQueryKey({ path: { repositoryId } });
+  const versionsQueryKey = getRepositorySbomVersionsQueryKey({
+    path: { repositoryId },
+  });
 
   const {
     data: sbom,
@@ -109,6 +113,7 @@ const RepositorySbomPage = () => {
     mutationFn: (file: File) => uploadRepositorySbom(repositoryId, file),
     onSuccess(data) {
       queryClient.setQueryData(sbomQueryKey, data);
+      void queryClient.invalidateQueries({ queryKey: versionsQueryKey });
       toast.info('Upload SBOM', {
         description: `"${data.fileName}" (${data.format} ${data.specVersion}, ${data.componentCount} components) was uploaded. Runs started from now on analyze it.`,
       });
@@ -122,14 +127,15 @@ const RepositorySbomPage = () => {
     ...deleteRepositorySbomMutation(),
     async onSuccess() {
       await queryClient.resetQueries({ queryKey: sbomQueryKey });
-      toast.info('Delete SBOM', {
+      await queryClient.invalidateQueries({ queryKey: versionsQueryKey });
+      toast.info('Stop using the SBOM', {
         description: isUploadOnly
-          ? 'The uploaded SBOM was deleted. Upload another one to analyze this repository.'
-          : 'The uploaded SBOM was deleted. Runs analyze the SBOM of the repository URL again.',
+          ? 'The SBOM stays in the history. Upload another one or use one from the history to analyze this repository.'
+          : 'The SBOM stays in the history. Runs analyze the SBOM of the repository URL again.',
       });
     },
     onError(error: ApiError) {
-      toastError('Unable to delete the SBOM', error);
+      toastError('Unable to stop using the SBOM', error);
     },
   });
 
@@ -165,132 +171,135 @@ const RepositorySbomPage = () => {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>SBOM</CardTitle>
-        <CardDescription>
-          The SBOM that runs of this repository analyze. An uploaded SBOM takes
-          precedence over the SBOM of the repository URL. CycloneDX (JSON, XML)
-          and SPDX 2 (JSON, YAML, tag-value, XML) and 3 (JSON-LD) are supported;
-          the format is detected from the content.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className='flex flex-col gap-6'>
-        {isPending && <LoadingIndicator />}
+    <div className='flex flex-col gap-4'>
+      <Card>
+        <CardHeader>
+          <CardTitle>SBOM</CardTitle>
+          <CardDescription>
+            The SBOM that runs of this repository analyze. An uploaded SBOM
+            takes precedence over the SBOM of the repository URL. CycloneDX
+            (JSON, XML) and SPDX 2 (JSON, YAML, tag-value, XML) and 3 (JSON-LD)
+            are supported; the format is detected from the content.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className='flex flex-col gap-6'>
+          {isPending && <LoadingIndicator />}
 
-        {noSbom &&
-          (isUploadOnly ? (
-            <div className='text-muted-foreground'>
-              No SBOM was uploaded yet. Upload one to analyze this repository.
+          {noSbom &&
+            (isUploadOnly ? (
+              <div className='text-muted-foreground'>
+                No uploaded SBOM is used. Upload one, or use one from the
+                history, to analyze this repository.
+              </div>
+            ) : (
+              <div className='text-muted-foreground'>
+                No uploaded SBOM is used. Runs analyze the SBOM of the
+                repository URL,{' '}
+                <span className='break-all'>{repository.url}</span>.
+              </div>
+            ))}
+
+          {error && !noSbom && (
+            <div className='text-destructive'>
+              Unable to load the information about the uploaded SBOM.
             </div>
-          ) : (
-            <div className='text-muted-foreground'>
-              No SBOM was uploaded. Runs analyze the SBOM of the repository URL,{' '}
-              <span className='break-all'>{repository.url}</span>.
-            </div>
-          ))}
+          )}
 
-        {error && !noSbom && (
-          <div className='text-destructive'>
-            Unable to load the information about the uploaded SBOM.
-          </div>
-        )}
-
-        {sbom && (
-          <div className='flex flex-col gap-2'>
-            <Property label='File'>{sbom.fileName}</Property>
-            <Property label='Format'>
-              {sbom.format} {sbom.specVersion}
-            </Property>
-            <Property label='Size'>{formatFileSize(sbom.size)}</Property>
-            <Property label='Components'>{sbom.componentCount}</Property>
-            {sbom.rootComponents && sbom.rootComponents.length > 0 && (
-              <Property label='Described components'>
-                {sbom.rootComponents.join(', ')}
+          {sbom && (
+            <div className='flex flex-col gap-2'>
+              <Property label='File'>{sbom.fileName}</Property>
+              <Property label='Format'>
+                {sbom.format} {sbom.specVersion}
               </Property>
-            )}
-            <Property label='Uploaded'>
-              <TimestampWithUTC timestamp={sbom.uploadedAt} />
-              {sbom.uploadedBy && ` by ${sbom.uploadedBy}`}
-            </Property>
-            <Property label='SHA-256'>
-              <span className='font-mono text-sm'>{sbom.sha256}</span>
-            </Property>
-          </div>
-        )}
-
-        {sbom?.warnings && sbom.warnings.length > 0 && (
-          <Alert>
-            <AlertTitle>Warnings</AlertTitle>
-            <AlertDescription>
-              <ul className='list-disc pl-4'>
-                {sbom.warnings.map((warning) => (
-                  <li key={warning}>{warning}</li>
-                ))}
-              </ul>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <div className='flex flex-wrap gap-2'>
-          <input
-            ref={fileInput}
-            type='file'
-            accept={SBOM_FILE_ACCEPT}
-            className='hidden'
-            onChange={handleFileChange}
-          />
-          <Button
-            onClick={() => fileInput.current?.click()}
-            disabled={canWrite !== true || upload.isPending}
-          >
-            <Upload className='h-4 w-4' />
-            {upload.isPending
-              ? 'Uploading...'
-              : sbom
-                ? 'Replace SBOM'
-                : 'Upload SBOM'}
-          </Button>
-          {sbom && (
-            <>
-              <Button variant='outline' onClick={handleDownload}>
-                <Download className='h-4 w-4' />
-                Download
-              </Button>
-              <DeleteDialog
-                thingName='uploaded SBOM'
-                description={
-                  isUploadOnly
-                    ? 'Runs fail until another SBOM is uploaded.'
-                    : 'Runs started afterwards analyze the SBOM of the repository URL again.'
-                }
-                uiComponent={
-                  <Button variant='destructive' disabled={remove.isPending}>
-                    Delete SBOM
-                  </Button>
-                }
-                onDelete={() => remove.mutate({ path: { repositoryId } })}
-                disabled={canWrite !== true}
-              />
-            </>
+              <Property label='Size'>{formatFileSize(sbom.size)}</Property>
+              <Property label='Components'>{sbom.componentCount}</Property>
+              {sbom.rootComponents && sbom.rootComponents.length > 0 && (
+                <Property label='Described components'>
+                  {sbom.rootComponents.join(', ')}
+                </Property>
+              )}
+              <Property label='Uploaded'>
+                <TimestampWithUTC timestamp={sbom.uploadedAt} />
+                {sbom.uploadedBy && ` by ${sbom.uploadedBy}`}
+              </Property>
+              <Property label='SHA-256'>
+                <span className='font-mono text-sm'>{sbom.sha256}</span>
+              </Property>
+            </div>
           )}
-          {sbom && (
-            <Button variant='outline' asChild>
-              <Link
-                to='/organizations/$orgId/products/$productId/repositories/$repoId/create-run'
-                params={{
-                  orgId: params.orgId,
-                  productId: params.productId,
-                  repoId: params.repoId,
-                }}
-              >
-                Create a run
-              </Link>
+
+          {sbom?.warnings && sbom.warnings.length > 0 && (
+            <Alert>
+              <AlertTitle>Warnings</AlertTitle>
+              <AlertDescription>
+                <ul className='list-disc pl-4'>
+                  {sbom.warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div className='flex flex-wrap gap-2'>
+            <input
+              ref={fileInput}
+              type='file'
+              accept={SBOM_FILE_ACCEPT}
+              className='hidden'
+              onChange={handleFileChange}
+            />
+            <Button
+              onClick={() => fileInput.current?.click()}
+              disabled={canWrite !== true || upload.isPending}
+            >
+              <Upload className='h-4 w-4' />
+              {upload.isPending
+                ? 'Uploading...'
+                : sbom
+                  ? 'Replace SBOM'
+                  : 'Upload SBOM'}
             </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+            {sbom && (
+              <>
+                <Button variant='outline' onClick={handleDownload}>
+                  <Download className='h-4 w-4' />
+                  Download
+                </Button>
+                <Button
+                  variant='outline'
+                  title={
+                    isUploadOnly
+                      ? 'Runs fail until another SBOM is uploaded or used again.'
+                      : 'Runs analyze the SBOM of the repository URL again.'
+                  }
+                  disabled={canWrite !== true || remove.isPending}
+                  onClick={() => remove.mutate({ path: { repositoryId } })}
+                >
+                  <CircleSlash className='h-4 w-4' />
+                  Stop using
+                </Button>
+              </>
+            )}
+            {sbom && (
+              <Button variant='outline' asChild>
+                <Link
+                  to='/organizations/$orgId/products/$productId/repositories/$repoId/create-run'
+                  params={{
+                    orgId: params.orgId,
+                    productId: params.productId,
+                    repoId: params.repoId,
+                  }}
+                >
+                  Create a run
+                </Link>
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+      <SbomHistory repositoryId={repositoryId} canWrite={canWrite === true} />
+    </div>
   );
 };
 

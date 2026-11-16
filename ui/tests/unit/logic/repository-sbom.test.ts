@@ -20,17 +20,26 @@
 import { AxiosError, AxiosHeaders } from 'axios';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getRepositorySbomContent, putRepositorySbom } from '@/api/sdk.gen';
+import {
+  getRepositorySbomContent,
+  getRepositorySbomVersionContent,
+  getRunSbomContent,
+  putRepositorySbom,
+} from '@/api/sdk.gen';
 import { createRepositoryAndCredentials } from '@/lib/repository-credentials';
 import {
   createRepositoryWithSbom,
   fetchRepositorySbomContent,
+  fetchRepositorySbomVersionContent,
+  fetchRunSbomContent,
   isSbomNotFound,
   uploadRepositorySbom,
 } from '@/lib/repository-sbom';
 
 vi.mock('@/api/sdk.gen', () => ({
   getRepositorySbomContent: vi.fn(),
+  getRepositorySbomVersionContent: vi.fn(),
+  getRunSbomContent: vi.fn(),
   putRepositorySbom: vi.fn(),
 }));
 
@@ -115,6 +124,31 @@ describe('repository SBOM', () => {
     expect(await fetchRepositorySbomContent(7)).toBe(blob);
     expect(getRepositorySbomContent).toHaveBeenCalledWith({
       path: { repositoryId: 7 },
+      responseType: 'blob',
+      throwOnError: true,
+    });
+  });
+
+  it('downloads an SBOM from the history and the SBOM of a run as blobs', async () => {
+    const blob = new Blob(['{}']);
+    vi.mocked(getRepositorySbomVersionContent).mockResolvedValue({
+      data: blob,
+    } as unknown as Awaited<
+      ReturnType<typeof getRepositorySbomVersionContent>
+    >);
+    vi.mocked(getRunSbomContent).mockResolvedValue({
+      data: blob,
+    } as unknown as Awaited<ReturnType<typeof getRunSbomContent>>);
+
+    expect(await fetchRepositorySbomVersionContent(7, 3)).toBe(blob);
+    expect(await fetchRunSbomContent(12)).toBe(blob);
+    expect(getRepositorySbomVersionContent).toHaveBeenCalledWith({
+      path: { repositoryId: 7, sbomId: 3 },
+      responseType: 'blob',
+      throwOnError: true,
+    });
+    expect(getRunSbomContent).toHaveBeenCalledWith({
+      path: { runId: 12 },
       responseType: 'blob',
       throwOnError: true,
     });

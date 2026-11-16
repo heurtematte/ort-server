@@ -38,6 +38,7 @@ import { config } from '@/config';
 import { formatFileSize } from '@/helpers/format-file-size';
 import { useUser } from '@/hooks/use-user.ts';
 import { toastError } from '@/lib/toast';
+import { AnalyzedSbomCard } from './-components/analyzed-sbom-card';
 
 const API_URL = config.API_URL;
 
@@ -121,6 +122,7 @@ const SBOMComponent = () => {
 
   return (
     <div className='flex flex-col gap-4'>
+      <AnalyzedSbomCard runId={ortRun.id} />
       <div className='grid grid-cols-2 gap-4'>
         <Card>
           <CardHeader className='text-center'>

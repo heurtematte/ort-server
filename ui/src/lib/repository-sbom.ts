@@ -20,7 +20,12 @@
 import { AxiosError } from 'axios';
 
 import type { PutRepositorySbomData, RepositorySbom } from '@/api';
-import { getRepositorySbomContent, putRepositorySbom } from '@/api/sdk.gen';
+import {
+  getRepositorySbomContent,
+  getRepositorySbomVersionContent,
+  getRunSbomContent,
+  putRepositorySbom,
+} from '@/api/sdk.gen';
 import { formatFileSize } from '@/helpers/format-file-size';
 import {
   createRepositoryAndCredentials,
@@ -92,7 +97,35 @@ export async function fetchRepositorySbomContent(
   return data as Blob;
 }
 
-/** Return whether the given error means that no SBOM was uploaded for a repository. */
+/** Download the SBOM with the given ID from the history of the SBOMs of a repository as a file. */
+export async function fetchRepositorySbomVersionContent(
+  repositoryId: number,
+  sbomId: number
+): Promise<Blob> {
+  const { data } = await getRepositorySbomVersionContent({
+    path: { repositoryId, sbomId },
+    responseType: 'blob',
+    throwOnError: true,
+  });
+
+  return data as Blob;
+}
+
+/** Download the SBOM that the run with the given ID analyzed as a file. */
+export async function fetchRunSbomContent(runId: number): Promise<Blob> {
+  const { data } = await getRunSbomContent({
+    path: { runId },
+    responseType: 'blob',
+    throwOnError: true,
+  });
+
+  return data as Blob;
+}
+
+/**
+ * Return whether the given error means that no SBOM was uploaded for a repository, or that a run
+ * analyzed no SBOM.
+ */
 export function isSbomNotFound(error: unknown): boolean {
   return error instanceof AxiosError && error.response?.status === 404;
 }
