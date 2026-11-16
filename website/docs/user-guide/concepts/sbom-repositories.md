@@ -158,8 +158,11 @@ Do not enable it together with the `SpdxDocumentFile` package manager, as both h
 ## Limitations
 
 - An SBOM does not provide the source code of its projects, so the scanner cannot scan them.
+  For a repository of type SBOM, the `projectScanners` of the scanner configuration of a run are therefore set to an empty list when the run is created.
   Packages are scanned if the SBOM provides a VCS or a source artifact location for them, or if a source artifact can be derived from their package URL.
   For SBOM repositories, it is usually sufficient to run the analyzer, the advisor, the evaluator, and the reporter.
+- Advisors cannot identify projects of type `SBOM` without a VCS revision, such as those of SBOM repositories, because ORT gives projects no package URL, so the advisor leaves them out.
+  Their dependencies are checked as usual.
 - Dependency-Track does not keep uploaded SBOMs, but generates a CycloneDX SBOM from its own model when it is exported.
 - Repository configuration files (`.ort.yml`) are not available for SBOM repositories; use the resolutions and the run configuration of ORT Server instead.
 
