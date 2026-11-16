@@ -26,10 +26,12 @@ Documents of versions that have not been tested, such as a future CycloneDX vers
 The SBOM of a repository is obtained from the first of the following sources that is available:
 
 1. **An uploaded SBOM.**
-   Upload it on the **SBOM** page of the repository in the UI, which also shows information about the uploaded SBOM and lets you download, replace, or delete it.
+   Upload it on the **SBOM** page of the repository in the UI, which also shows information about the current SBOM and lets you download or replace it, or stop using it.
    With the API, upload it with `PUT /api/v1/repositories/{repositoryId}/sbom`, either as the raw request body or as the first file of a `multipart/form-data` request.
-   The SBOM is validated before it is stored; uploading a new SBOM replaces the previous one.
-   `GET /api/v1/repositories/{repositoryId}/sbom` returns information about the uploaded SBOM, `GET .../sbom/content` returns the SBOM itself, and `DELETE .../sbom` deletes it.
+   The SBOM is validated before it is stored; uploading a new SBOM makes it the current SBOM, and the previous one stays in the [history](#history-and-traceability).
+   `GET /api/v1/repositories/{repositoryId}/sbom` returns information about the current SBOM, `GET .../sbom/content` returns the SBOM itself, and `DELETE .../sbom` stops using it, so that runs analyze the source of the repository URL again; the SBOM stays in the history.
+   With the [ORT Server CLI](../cli.md), upload it with `osc sbom upload --repository-id <id> --file <path>`, which prints the detected format and version, the number of components, and the warnings, and fails with the reason given by the server if the SBOM is rejected; `osc sbom info` and `osc sbom download` show and download the current SBOM.
+   In a CI pipeline, chain it with the start of a run, for instance `osc sbom upload --repository-id 42 --file bom.cdx.json && osc runs start --repository-id 42 --parameters '{"revision": "", "jobConfigs": {"analyzer": {}}}'`.
 2. **The source of the repository URL**, identified when the repository was created:
    - **A Dependency-Track project**, if the URL is the URL of a project page of the Dependency-Track frontend, such as `https://sbom.eclipse.org/projects/<uuid>`: the analyzer exports the SBOM of the project from Dependency-Track.
    - **A sbomify component or product**, if the URL is the URL of a component or product page of a [sbomify](https://github.com/sbomify/sbomify) instance, such as `https://app.sbomify.com/component/<id>/` or `https://app.sbomify.com/public/product/<id>/`: the analyzer downloads the SBOM of the component, or the aggregated SBOM of the product.
@@ -73,6 +75,7 @@ For a repository of type SBOM, the revision of a run does not select a branch, b
 
 A revision that does not exist fails the run with an explicit error, such as "The Dependency-Track project 'che-server' has no version 'main'".
 The revision of a run that has no revision is set to the version of the project or component of the source, or of the component the SBOM describes, and the resolved revision is set to the SHA-256 checksum of the analyzed SBOM, so that it can be identified later.
+If an SBOM is uploaded for the repository, runs analyze it whatever their revision, which is then only recorded with the run.
 
 ### Credentials
 
@@ -112,6 +115,25 @@ curl -X PUT "$ORT_SERVER/api/v1/repositories/42/sbom?fileName=jetty-home.cdx.jso
   --data-binary @jetty-home-12.0.21-cyclonedx.json
 ```
 
+## History and Traceability
+
+The SBOMs uploaded for a repository are kept, so that the analysis of each run can be traced to the SBOM it analyzed:
+
+- The **History** of the **SBOM** page of the repository lists the uploaded SBOMs, the latest first, and flags the current one.
+  Any of them can be downloaded, or used again with **Use this version**, which makes it the current SBOM, for instance to analyze an earlier version again with the current advisors and rules.
+  With the API, `GET /api/v1/repositories/{repositoryId}/sbom/versions` lists them, `GET .../sbom/versions/{sbomId}/content` downloads one, and `POST .../sbom/versions/{sbomId}/restore` makes it the current SBOM.
+- Each run records the SBOM it analyzed, whether it was uploaded or obtained from the source of the repository URL, such as the export of a Dependency-Track project at the time of the run.
+  The **SBOMs** page of the run shows it as **Analyzed SBOM**, with its format, its number of components, its source, and its SHA-256 checksum, which is also the resolved revision of the run, and lets you download it.
+  With the API, `GET /api/v1/runs/{runId}/sbom` returns information about it and `GET .../sbom/content` the SBOM itself.
+  Runs created before this was introduced have no recorded SBOM.
+- **Compare Runs** in the menu of the repository compares the packages and the vulnerabilities of two runs, by default the latest run and the one before: it lists the new and the fixed vulnerabilities, and the added, removed, and updated packages.
+  Packages are matched by their coordinates without version, so that an update is shown as a changed version, and vulnerabilities by their ID and the package they affect.
+  The comparison works for runs of any repository.
+
+The metadata of the SBOMs is stored in the database, their contents in the `sbomStorage`, where the same content is stored only once per repository.
+The contents are deleted together with the repository.
+SBOMs uploaded with an earlier version of ORT Server, which did not keep the history, are added to it as the current SBOM when the repository is accessed.
+
 ## How SBOMs Are Mapped
 
 The conversion is done by the `SBOM` package manager plugin, which is provided by the [ORT SBOM Plugin](https://heurtematte.github.io/ort-sbom-plugin/):
@@ -150,6 +172,8 @@ The plugin supports the following options, which can be set in the `packageManag
 For a repository of type SBOM, the SBOM is analyzed only by the `SBOM` package manager, whatever package managers are configured, so it does not need to be enabled for these runs or among the default plugins.
 When a run of such a repository is created, the package managers of its analyzer configuration are set to `SBOM`, and the options of other package managers are removed, so that the configuration of the run shows what is analyzed.
 The create run form of the UI only shows this package manager for such a repository, enabled and locked, so that its options can be set.
+The form does not show the path, the environment configuration path, and the path includes and excludes either, as they do not apply to an SBOM, and it explains what the revision means for the repository.
+For a repository whose SBOM is only uploaded, it warns if no SBOM was uploaded yet.
 
 The `SBOM` package manager can also be enabled for runs of source code repositories by adding it to the `enabledPackageManagers` of the analyzer job configuration.
 It then analyzes all files matching `definitionFilePatterns` (such as `*.cdx.json`, `bom.xml`, or `*.spdx.json`) whose content is a supported SBOM.
@@ -161,7 +185,7 @@ Do not enable it together with the `SpdxDocumentFile` package manager, as both h
   For a repository of type SBOM, the `projectScanners` of the scanner configuration of a run are therefore set to an empty list when the run is created.
   Packages are scanned if the SBOM provides a VCS or a source artifact location for them, or if a source artifact can be derived from their package URL.
   For SBOM repositories, it is usually sufficient to run the analyzer, the advisor, the evaluator, and the reporter.
-- Advisors cannot identify projects of type `SBOM` without a VCS revision, such as those of SBOM repositories, because ORT gives projects no package URL, so the advisor leaves them out.
+- Advisors cannot identify projects and packages of type `SBOM` without package URL and VCS revision, such as the projects of SBOM repositories, to which ORT gives no package URL, or components without package URL, so the advisor leaves them out.
   Their dependencies are checked as usual.
 - Dependency-Track does not keep uploaded SBOMs, but generates a CycloneDX SBOM from its own model when it is exported.
 - Repository configuration files (`.ort.yml`) are not available for SBOM repositories; use the resolutions and the run configuration of ORT Server instead.
@@ -178,6 +202,7 @@ Alternatively, the script can export the SBOMs from Dependency-Track and upload 
 
 ## Administration
 
-Uploaded SBOMs are kept in the storage configured in the `sbomStorage` section of the configuration of the core and the workers, which uses the [database storage](../../admin-guide/infrastructure/storage/database.md) with the namespace `sboms` by default.
+The contents of the uploaded SBOMs and of the SBOMs analyzed by runs are kept in the storage configured in the `sbomStorage` section of the configuration of the core and the workers, which uses the [database storage](../../admin-guide/infrastructure/storage/database.md) with the namespace `sboms` by default.
 Like the other storages, it can be configured with environment variables, here prefixed with `SBOM_STORAGE_`, for instance `SBOM_STORAGE_NAME=s3` and `SBOM_STORAGE_BUCKET_NAME`.
-The SBOM of a repository is deleted together with the repository.
+The SBOMs of a repository are deleted together with the repository.
+The content of the SBOM of a deleted run is kept as long as the repository exists, as other runs or uploads may share it.
