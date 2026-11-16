@@ -44,7 +44,8 @@ import type { CreateRunFormValues } from './run-schema';
  * Due to API schema and requirements for the form schema, the form values can't be directly passed
  * to the API. This function converts form values to correct payload to create an ORT run. For a
  * repository of type SBOM, as indicated by [isSbomRepository], the SBOM package manager is the only
- * enabled package manager, as it is the only one that analyzes its SBOM.
+ * enabled package manager, as it is the only one that analyzes its SBOM, and the settings that
+ * only apply to source code are left out.
  */
 export function formValuesToPayload(
   values: CreateRunFormValues,
@@ -263,11 +264,15 @@ export function formValuesToPayload(
     : undefined;
   const labels = values.labels ? convertArrayToMap(values.labels) : undefined;
 
+  // The path, path includes and excludes, and the environment configuration path do not apply to
+  // the SBOM of an SBOM repository, so the form does not show them and they are not sent.
   return {
     revision: values.revision,
-    path: values.path,
+    path: isSbomRepository ? undefined : values.path,
     scopes: formEntriesToIncludesExcludes<ScopeIncludesExcludes>(values.scopes),
-    paths: formEntriesToIncludesExcludes<PathIncludesExcludes>(values.paths),
+    paths: isSbomRepository
+      ? undefined
+      : formEntriesToIncludesExcludes<PathIncludesExcludes>(values.paths),
     jobConfigs: {
       analyzer: analyzerConfig,
       advisor: advisorConfig,
@@ -279,6 +284,8 @@ export function formValuesToPayload(
     },
     labels,
     jobConfigContext: values.jobConfigContext,
-    environmentConfigPath: values.environmentConfigPath,
+    environmentConfigPath: isSbomRepository
+      ? undefined
+      : values.environmentConfigPath,
   };
 }

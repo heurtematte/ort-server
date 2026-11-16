@@ -27,6 +27,7 @@ import {
   getOrganizationOptions,
   getProductOptions,
   getRepositoryOptions,
+  getRepositorySbomOptions,
   postRepositoryRunMutation,
 } from '@/api/@tanstack/react-query.gen';
 import { getAvailableRepositorySecrets, getRepositoryRun } from '@/api/sdk.gen';
@@ -40,6 +41,8 @@ import {
 import { useUser } from '@/hooks/use-user.ts';
 import { ApiError } from '@/lib/api-error';
 import { runCreated } from '@/lib/entity-cache';
+import { isSbomNotFound } from '@/lib/repository-sbom';
+import { getSbomRunInput } from '@/lib/sbom-source';
 import { toast, toastError } from '@/lib/toast';
 import { buildRecentRun, useHomeRecentRunActions } from '@/providers/home-data';
 import {
@@ -129,6 +132,18 @@ const CreateRunPage = () => {
     }),
   });
 
+  const isSbomRepository = repository?.type === 'SBOM';
+
+  // The uploaded SBOM of an SBOM repository determines what its runs analyze. A missing SBOM is
+  // a normal state, not an error to retry; other errors leave it unknown.
+  const uploadedSbom = useQuery({
+    ...getRepositorySbomOptions({
+      path: { repositoryId: Number.parseInt(params.repoId) },
+    }),
+    enabled: isSbomRepository,
+    retry: (failureCount, error) => !isSbomNotFound(error) && failureCount < 3,
+  });
+
   const { mutateAsync, isPending } = useMutation({
     ...postRepositoryRunMutation(),
     onSuccess(response) {
@@ -183,7 +198,16 @@ const CreateRunPage = () => {
       defaultPlugins={defaultPlugins}
       isSubmitting={isPending}
       isSuperuser={isSuperuser}
-      isSbomRepository={repository.type === 'SBOM'}
+      isSbomRepository={isSbomRepository}
+      sbomRunInput={
+        isSbomRepository
+          ? getSbomRunInput(
+              repository.url,
+              uploadedSbom.data ??
+                (isSbomNotFound(uploadedSbom.error) ? null : undefined)
+            )
+          : undefined
+      }
       onConfigContextChange={setConfigContext}
       onSubmit={submitRun}
       permissions={permissions}

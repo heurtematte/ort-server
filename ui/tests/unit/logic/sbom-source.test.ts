@@ -21,9 +21,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   detectSbomSource,
+  getSbomRevisionDescription,
+  getSbomRunInput,
   getSbomSourceLabel,
   getSbomUploadUrl,
   isSbomUploadUrl,
+  SBOM_REVISION_DESCRIPTION,
 } from '@/lib/sbom-source';
 
 describe('SBOM source', () => {
@@ -89,5 +92,44 @@ describe('SBOM source', () => {
       'upload:sbom@2026-11-13T17:05:12Z'
     );
     expect(isSbomUploadUrl(getSbomUploadUrl('bom.cdx.json'))).toBe(true);
+  });
+
+  it('determines what the runs of an SBOM repository analyze', () => {
+    const uploadUrl = 'upload:bom.cdx.json@2026-11-13T17:05:12Z';
+    const sourceUrl =
+      'https://sbom.eclipse.org/projects/583d447a-ca3e-45b9-8eaf-464889a4b2c7';
+    const uploaded = { fileName: 'bom.cdx.json' };
+
+    expect(getSbomRunInput(sourceUrl, uploaded)).toEqual({
+      kind: 'UPLOADED',
+      fileName: 'bom.cdx.json',
+    });
+    expect(getSbomRunInput(uploadUrl, uploaded)).toEqual({
+      kind: 'UPLOADED',
+      fileName: 'bom.cdx.json',
+    });
+    expect(getSbomRunInput(sourceUrl, null)).toEqual({ kind: 'SOURCE' });
+    expect(getSbomRunInput(sourceUrl, undefined)).toEqual({ kind: 'SOURCE' });
+    expect(getSbomRunInput(uploadUrl, null)).toEqual({
+      kind: 'MISSING_UPLOAD',
+    });
+    // While it is unknown whether an SBOM was uploaded, it is the only possible input.
+    expect(getSbomRunInput(uploadUrl, undefined)).toEqual({ kind: 'UPLOADED' });
+  });
+
+  it('describes the revision depending on what runs analyze', () => {
+    expect(getSbomRevisionDescription({ kind: 'SOURCE' })).toBe(
+      SBOM_REVISION_DESCRIPTION
+    );
+    expect(
+      getSbomRevisionDescription({ kind: 'UPLOADED', fileName: 'bom.cdx.json' })
+    ).toBe(
+      'Runs analyze the SBOM uploaded for this repository, "bom.cdx.json", so the revision ' +
+        'is only recorded with the run. Leave it empty to record the version of the component ' +
+        'that the SBOM describes.'
+    );
+    expect(getSbomRevisionDescription({ kind: 'MISSING_UPLOAD' })).toMatch(
+      /^Runs analyze the SBOM uploaded for this repository, so the revision is only recorded/
+    );
   });
 });

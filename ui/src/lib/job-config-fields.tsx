@@ -246,3 +246,10 @@ export const includesExcludesField = {
     </>
   ),
 } as const satisfies JobConfigField;
+
+/**
+ * The help text of the includes and excludes of a run of a repository of type SBOM, which has no
+ * paths to exclude and no `.ort.yml`.
+ */
+export const SBOM_INCLUDES_EXCLUDES_DESCRIPTION =
+  'Exclude scopes of the SBOM from this run, or include only some of them.';

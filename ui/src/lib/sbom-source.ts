@@ -64,11 +64,52 @@ export function getSbomSourceLabel(kind: SbomSourceKind): string {
   return sbomSourceLabels[kind];
 }
 
-/** The meaning of the revision of a run of a repository of type SBOM. */
+/** The meaning of the revision of a run of a repository of type SBOM that analyzes its source. */
 export const SBOM_REVISION_DESCRIPTION =
   "The version of the Dependency-Track project or sbomify component to analyze, or 'latest'. " +
   'Leave it empty to analyze the version of the repository URL. A revision cannot be used for ' +
   'SBOM documents.';
+
+/** What the runs of a repository of type SBOM analyze. */
+export type SbomRunInput =
+  /** The SBOM uploaded for the repository, with the name of its file if it is known. */
+  | { kind: 'UPLOADED'; fileName?: string }
+  /** Nothing: the SBOM of the repository is only uploaded, but no uploaded SBOM is used. */
+  | { kind: 'MISSING_UPLOAD' }
+  /** The SBOM of the source that the URL of the repository identifies. */
+  | { kind: 'SOURCE' };
+
+/**
+ * Return what the runs of a repository of type SBOM with the given [url] analyze, given its
+ * [uploadedSbom]: the current uploaded SBOM, null if there is none, or undefined if this is unknown.
+ */
+export function getSbomRunInput(
+  url: string,
+  uploadedSbom: { fileName: string } | null | undefined
+): SbomRunInput {
+  if (uploadedSbom)
+    return { kind: 'UPLOADED', fileName: uploadedSbom.fileName };
+  if (!isSbomUploadUrl(url)) return { kind: 'SOURCE' };
+
+  return uploadedSbom === null
+    ? { kind: 'MISSING_UPLOAD' }
+    : { kind: 'UPLOADED' };
+}
+
+/** Return the meaning of the revision of a run that analyzes the given [input]. */
+export function getSbomRevisionDescription(input: SbomRunInput): string {
+  if (input.kind === 'SOURCE') return SBOM_REVISION_DESCRIPTION;
+
+  const sbom =
+    input.kind === 'UPLOADED' && input.fileName
+      ? `the SBOM uploaded for this repository, "${input.fileName}"`
+      : 'the SBOM uploaded for this repository';
+
+  return (
+    `Runs analyze ${sbom}, so the revision is only recorded with the run. Leave it empty to ` +
+    'record the version of the component that the SBOM describes.'
+  );
+}
 
 /**
  * The prefix of the URL of a repository of type SBOM whose SBOM is only uploaded, such as

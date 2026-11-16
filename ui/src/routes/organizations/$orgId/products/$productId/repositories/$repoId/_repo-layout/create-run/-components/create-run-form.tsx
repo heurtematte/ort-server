@@ -32,6 +32,7 @@ import type {
 } from '@/api';
 import { PayloadView } from '@/components/payload-view';
 import { Accordion } from '@/components/ui/accordion';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -59,7 +60,10 @@ import type {
   ProductPermissions,
   RepositoryPermissions,
 } from '@/lib/permissions';
-import { SBOM_REVISION_DESCRIPTION } from '@/lib/sbom-source';
+import {
+  getSbomRevisionDescription,
+  type SbomRunInput,
+} from '@/lib/sbom-source';
 import {
   AdvisorFields,
   AnalyzerFields,
@@ -111,8 +115,16 @@ export type CreateRunFormProps = {
   defaultPlugins?: DefaultPlugins[];
   isSubmitting: boolean;
   isSuperuser: boolean;
-  /** Whether the repository is of type SBOM, whose revision selects the version of its source. */
+  /**
+   * Whether the repository is of type SBOM. Its runs analyze an SBOM instead of source code, so
+   * the path, the environment configuration path, and path includes and excludes do not apply.
+   */
   isSbomRepository?: boolean;
+  /**
+   * What the runs of a repository of type SBOM analyze, which determines the meaning of the
+   * revision. Its source if it is not given.
+   */
+  sbomRunInput?: SbomRunInput;
   onConfigContextChange?: (configContext: string) => void;
   onSubmit: (payload: PostRepositoryRun) => Promise<void> | void;
   permissions: CreateRunPermissions;
@@ -134,6 +146,7 @@ export const CreateRunForm = ({
   isSubmitting,
   isSuperuser,
   isSbomRepository = false,
+  sbomRunInput = { kind: 'SOURCE' },
   onConfigContextChange,
   onSubmit,
   permissions,
@@ -438,6 +451,18 @@ export const CreateRunForm = ({
           className='space-y-8'
         >
           <CardContent>
+            {isSbomRepository && sbomRunInput.kind === 'MISSING_UPLOAD' && (
+              <Alert variant='destructive' className='mb-4'>
+                <TriangleAlert size={16} />
+                <AlertTitle>No uploaded SBOM is used</AlertTitle>
+                <AlertDescription>
+                  This repository has no source, so runs analyze the SBOM
+                  uploaded for it, but none is used. Upload an SBOM or use one
+                  from the history on the SBOM page of the repository, or the
+                  run fails.
+                </AlertDescription>
+              </Alert>
+            )}
             <FormField
               control={form.control}
               name='revision'
@@ -449,29 +474,32 @@ export const CreateRunForm = ({
                   </FormControl>
                   <FormDescription>
                     {isSbomRepository
-                      ? SBOM_REVISION_DESCRIPTION
+                      ? getSbomRevisionDescription(sbomRunInput)
                       : runConfigFields.revision.description}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name='path'
-              render={({ field }) => (
-                <FormItem className='pt-4'>
-                  <FormLabel>{runConfigFields.path.label}</FormLabel>
-                  <FormControl>
-                    <Input {...field} placeholder='(optional)' />
-                  </FormControl>
-                  <FormDescription>
-                    {runConfigFields.path.description}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* An SBOM is analyzed as a whole, so a path within the repository does not apply. */}
+            {!isSbomRepository && (
+              <FormField
+                control={form.control}
+                name='path'
+                render={({ field }) => (
+                  <FormItem className='pt-4'>
+                    <FormLabel>{runConfigFields.path.label}</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder='(optional)' />
+                    </FormControl>
+                    <FormDescription>
+                      {runConfigFields.path.description}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
             <FormField
               control={form.control}
               name='jobConfigContext'
@@ -490,24 +518,27 @@ export const CreateRunForm = ({
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name='environmentConfigPath'
-              render={({ field }) => (
-                <FormItem className='pt-4'>
-                  <FormLabel>
-                    {runConfigFields.environmentConfigPath.label}
-                  </FormLabel>
-                  <FormControl>
-                    <Input {...field} placeholder='(optional)' />
-                  </FormControl>
-                  <FormDescription>
-                    {runConfigFields.environmentConfigPath.description}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* The environment configuration file is read from the source code of a repository. */}
+            {!isSbomRepository && (
+              <FormField
+                control={form.control}
+                name='environmentConfigPath'
+                render={({ field }) => (
+                  <FormItem className='pt-4'>
+                    <FormLabel>
+                      {runConfigFields.environmentConfigPath.label}
+                    </FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder='(optional)' />
+                    </FormControl>
+                    <FormDescription>
+                      {runConfigFields.environmentConfigPath.description}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
             <FormField
               control={form.control}
               name='jobConfigs.ruleSet'
@@ -662,6 +693,7 @@ export const CreateRunForm = ({
             </Button>
 
             <IncludesExcludesSection
+              isSbomRepository={isSbomRepository}
               form={form}
               openItems={openAccordions}
               onOpenItemsChange={(value) =>

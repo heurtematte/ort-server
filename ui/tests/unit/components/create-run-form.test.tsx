@@ -825,6 +825,47 @@ describe('CreateRunForm', () => {
     ]);
   });
 
+  it('shows only the settings that apply to the uploaded SBOM of an SBOM repository', async () => {
+    renderCreateRunForm(vi.fn(), {
+      isSbomRepository: true,
+      sbomRunInput: { kind: 'UPLOADED', fileName: 'bom.cdx.json' },
+    });
+
+    expect(
+      await screen.findByText(
+        /^Runs analyze the SBOM uploaded for this repository, "bom.cdx.json"/
+      )
+    ).toBeVisible();
+    expect(screen.getByLabelText('Revision')).toBeVisible();
+    expect(screen.queryByLabelText('Path')).toBeNull();
+    expect(
+      screen.queryByLabelText('Environment configuration path')
+    ).toBeNull();
+    expect(screen.getByRole('button', { name: /^Scopes/ })).toBeVisible();
+    expect(screen.queryByRole('button', { name: /^Paths/ })).toBeNull();
+    expect(screen.queryByText(/\.ort\.yml/)).toBeNull();
+    expect(screen.queryByText('No uploaded SBOM is used')).toBeNull();
+  });
+
+  it('warns that a repository whose SBOM is only uploaded has no SBOM yet', async () => {
+    renderCreateRunForm(vi.fn(), {
+      isSbomRepository: true,
+      sbomRunInput: { kind: 'MISSING_UPLOAD' },
+    });
+
+    expect(await screen.findByText('No uploaded SBOM is used')).toBeVisible();
+  });
+
+  it('shows the settings for source code for other repositories', async () => {
+    renderCreateRunForm();
+
+    expect(await screen.findByLabelText('Path')).toBeVisible();
+    expect(
+      screen.getByLabelText('Environment configuration path')
+    ).toBeVisible();
+    expect(screen.getByRole('button', { name: /^Paths/ })).toBeVisible();
+  });
+
   it('submits a scope exclude added from a typed pattern', async () => {
     const { onSubmit, user } = renderCreateRunForm();
 

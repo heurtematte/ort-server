@@ -386,6 +386,39 @@ describe('formValuesToPayload', () => {
     });
   });
 
+  it('leaves out the settings that only apply to source code for an SBOM repository', () => {
+    const values = createFormValues();
+    values.path = 'backend';
+    values.environmentConfigPath = 'config/.ort.env.yml';
+    values.scopes = [
+      {
+        type: 'exclude',
+        pattern: 'test',
+        reason: 'TEST_DEPENDENCY_OF',
+        comment: '',
+      },
+    ];
+    values.paths = [
+      {
+        type: 'exclude',
+        pattern: 'docs/**',
+        reason: 'DOCUMENTATION_OF',
+        comment: '',
+      },
+    ];
+
+    const payload = formValuesToPayload(values, [], true);
+
+    expect(payload.revision).toBe('main');
+    expect(payload.path).toBeUndefined();
+    expect(payload.paths).toBeUndefined();
+    expect(payload.environmentConfigPath).toBeUndefined();
+    expect(payload.scopes).toEqual({
+      excludes: [{ pattern: 'test', reason: 'TEST_DEPENDENCY_OF' }],
+      includes: [],
+    });
+  });
+
   it('omits package manager configurations without options or mustRunAfter', () => {
     const values = createFormValues();
     values.jobConfigs.analyzer.packageManagers = ['Maven'];

@@ -44,7 +44,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useDebounce } from '@/hooks/use-debounce';
-import { includesExcludesField } from '@/lib/job-config-fields';
+import {
+  includesExcludesField,
+  SBOM_INCLUDES_EXCLUDES_DESCRIPTION,
+} from '@/lib/job-config-fields';
 import {
   getReasonOptions,
   guessReason,
@@ -69,6 +72,11 @@ type IncludesExcludesSectionProps = {
   /** The suggestions from the projects of the last analyzed run, null if there is no such run. */
   projectSuggestions?: ProjectSuggestions | null;
   projectSuggestionsLoading?: boolean;
+  /**
+   * Whether the run is a run of a repository of type SBOM, which has no paths to exclude and no
+   * `.ort.yml`, so that only scopes are offered.
+   */
+  isSbomRepository?: boolean;
 };
 
 /** The section of the create run form for the path and scope includes and excludes of a run. */
@@ -78,11 +86,14 @@ export const IncludesExcludesSection = ({
   onOpenItemsChange,
   projectSuggestions,
   projectSuggestionsLoading,
+  isSbomRepository = false,
 }: IncludesExcludesSectionProps) => (
   <>
     <h3 className='mt-4'>{includesExcludesField.label}</h3>
     <div className='text-sm text-gray-500'>
-      {includesExcludesField.description}
+      {isSbomRepository
+        ? SBOM_INCLUDES_EXCLUDES_DESCRIPTION
+        : includesExcludesField.description}
     </div>
     <Accordion
       type='multiple'
@@ -90,7 +101,10 @@ export const IncludesExcludesSection = ({
       value={openItems}
       onValueChange={onOpenItemsChange}
     >
-      {(['scopes', 'paths'] as const).map((kind) => (
+      {(isSbomRepository
+        ? (['scopes'] as const)
+        : (['scopes', 'paths'] as const)
+      ).map((kind) => (
         <IncludesExcludesItem
           key={kind}
           form={form}
