@@ -168,24 +168,30 @@ class AdvisorRunnerTest : WordSpec({
             )
         }
 
-        "give advice for projects and packages, except for projects of type SBOM without VCS revision" {
+        "give advice for projects and packages, except for those of type SBOM without purl or VCS revision" {
             val requestedPackages = slot<Set<Package>>()
             val osvFactory = mockAdviceProviderFactory("OSV", requestedPackages)
             mockAdvisorAll(listOf(osvFactory))
 
+            val vcsWithRevision = VcsInfo(
+                type = VcsType.GIT,
+                url = "https://github.com/example/lib.git",
+                revision = "0123456789abcdef0123456789abcdef01234567"
+            )
             val sbomProject = Project.EMPTY.copy(id = Identifier("SBOM:org.example:app:1.0.0"))
             val sbomProjectWithRevision = Project.EMPTY.copy(
                 id = Identifier("SBOM:org.example:lib:2.0.0"),
-                vcsProcessed = VcsInfo(
-                    type = VcsType.GIT,
-                    url = "https://github.com/example/lib.git",
-                    revision = "0123456789abcdef0123456789abcdef01234567"
-                )
+                vcsProcessed = vcsWithRevision
             )
             val mavenProject = Project.EMPTY.copy(id = Identifier("Maven:org.example:service:3.0.0"))
             val pkg = Package.EMPTY.copy(
                 id = Identifier("Maven:org.example:library:1.2.3"),
                 purl = "pkg:maven/org.example/library@1.2.3"
+            )
+            val sbomPackage = Package.EMPTY.copy(id = Identifier("SBOM::component:"))
+            val sbomPackageWithRevision = Package.EMPTY.copy(
+                id = Identifier("SBOM::other-component:"),
+                vcsProcessed = vcsWithRevision
             )
 
             val jobConfig = AdvisorJobConfiguration(advisors = listOf("OSV"))
@@ -196,7 +202,7 @@ class AdvisorRunnerTest : WordSpec({
                     analyzer = AnalyzerRun.EMPTY.copy(
                         result = AnalyzerResult.EMPTY.copy(
                             projects = setOf(sbomProject, sbomProjectWithRevision, mavenProject),
-                            packages = setOf(pkg)
+                            packages = setOf(pkg, sbomPackage, sbomPackageWithRevision)
                         )
                     )
                 ),
@@ -206,7 +212,8 @@ class AdvisorRunnerTest : WordSpec({
             requestedPackages.captured.map { it.id } shouldContainExactlyInAnyOrder listOf(
                 sbomProjectWithRevision.id,
                 mavenProject.id,
-                pkg.id
+                pkg.id,
+                sbomPackageWithRevision.id
             )
         }
     }
