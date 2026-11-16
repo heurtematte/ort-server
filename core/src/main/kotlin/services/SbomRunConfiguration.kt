@@ -29,6 +29,9 @@ internal const val SBOM_PACKAGE_MANAGER_ID = "SBOM"
  * repository only with the SBOM package manager, whatever package managers are configured, so the configuration of
  * the analyzer is restricted to this package manager and its options. This way, the configuration of the run shows
  * the package managers that are actually used.
+ *
+ * The projects of such a repository are the components that the SBOM describes, whose source code is not available,
+ * so the scanner is configured to scan no projects. Packages are scanned as configured.
  */
 internal fun JobConfigurations.forSbomRepository(): JobConfigurations =
     copy(
@@ -39,5 +42,6 @@ internal fun JobConfigurations.forSbomRepository(): JobConfigurations =
                 ?.filterKeys { it == SBOM_PACKAGE_MANAGER_ID }
                 ?.mapValues { (_, config) -> config.copy(mustRunAfter = null) }
                 ?.takeUnless { it.isEmpty() }
-        )
+        ),
+        scanner = scanner?.copy(projectScanners = emptyList())
     )

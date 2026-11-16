@@ -1009,6 +1009,37 @@ class RepositoriesRouteIntegrationTest : AbstractIntegrationTest({
             }
         }
 
+        "scan no projects in a run of an SBOM repository" {
+            integrationTestApplication {
+                val createdRepository = createRepository(type = RepositoryType.SBOM)
+                val scannerPluginId = pluginService.getPlugins().first { it.type == PluginType.SCANNER }.id
+
+                val createRun = PostRepositoryRun(
+                    revision = "",
+                    jobConfigs = ApiJobConfigurations(
+                        scanner = ScannerJobConfiguration(
+                            projectScanners = listOf(scannerPluginId),
+                            scanners = listOf(scannerPluginId)
+                        )
+                    )
+                )
+
+                val response = superuserClient.post("/api/v1/repositories/${createdRepository.id}/runs") {
+                    setBody(createRun)
+                }
+
+                response shouldHaveStatus HttpStatusCode.Created
+
+                val run = ortRunRepository.listForRepository(createdRepository.id).data.single()
+                MessageSenderFactoryForTesting.expectMessage(OrchestratorEndpoint)
+
+                with(run.jobConfigs.scanner.shouldNotBeNull()) {
+                    projectScanners shouldBe emptyList()
+                    scanners shouldBe listOf(scannerPluginId)
+                }
+            }
+        }
+
         "store the resolved config context" {
             integrationTestApplication {
                 val createdRepository = createRepository()
