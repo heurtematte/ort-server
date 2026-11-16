@@ -91,7 +91,7 @@ class OrtServerMain : SuspendingCliktCommand(COMMAND_NAME) {
             helpFormatter = { MordantHelpFormatter(context = it, requiredOptionMarker = "*", showDefaultValues = true) }
         }
 
-        subcommands(AuthCommand(), RunsCommand())
+        subcommands(AuthCommand(), RunsCommand(), SbomCommand())
 
         versionOption(
             version = ORT_SERVER_VERSION,

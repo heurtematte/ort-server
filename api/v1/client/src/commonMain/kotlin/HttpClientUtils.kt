@@ -44,6 +44,7 @@ import io.ktor.serialization.kotlinx.json.json
 
 import kotlinx.serialization.json.Json
 
+import org.eclipse.apoapsis.ortserver.shared.apimodel.ErrorResponse
 import org.eclipse.apoapsis.ortserver.utils.system.getEnv
 
 /**
@@ -117,7 +118,9 @@ fun createOrtHttpClient(
             validateResponse { response ->
                 if (!response.status.isSuccess()) {
                     when (response.status) {
-                        BadRequest -> throw BadRequestException("Request is invalid.")
+                        BadRequest -> throw BadRequestException(
+                            json.parseErrorMessage(response.bodyAsText()) ?: "Request is invalid."
+                        )
 
                         Unauthorized -> throw UnauthorizedException(
                             "Authentication required for ${response.request.url}."
@@ -129,10 +132,15 @@ fun createOrtHttpClient(
 
                         InternalServerError -> throw InternalServerException("Internal server error.")
 
-                        else -> throw ResponseException(
-                            "Request failed with status ${response.status.value}: ${response.bodyAsText()}",
-                            response.status
-                        )
+                        else -> {
+                            val body = response.bodyAsText()
+
+                            throw ResponseException(
+                                "Request failed with status ${response.status.value}: " +
+                                    (json.parseErrorMessage(body) ?: body),
+                                response.status
+                            )
+                        }
                     }
                 }
             }
@@ -140,3 +148,14 @@ fun createOrtHttpClient(
 
         config()
     }
+
+/**
+ * Return the message of the [ErrorResponse] the server sent as the [body] of a failed request, followed by its cause if
+ * there is one, or null if the [body] is not an [ErrorResponse].
+ */
+internal fun Json.parseErrorMessage(body: String): String? {
+    val error = runCatching { decodeFromString<ErrorResponse>(body) }.getOrNull()
+        ?.takeIf { it.message.isNotBlank() } ?: return null
+
+    return error.cause?.takeIf { it.isNotBlank() }?.let { "${error.message} Cause: $it" } ?: error.message
+}

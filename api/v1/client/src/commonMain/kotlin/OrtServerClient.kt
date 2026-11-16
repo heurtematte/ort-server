@@ -30,6 +30,7 @@ import kotlinx.serialization.json.Json
 import org.eclipse.apoapsis.ortserver.client.api.AuthenticationApi
 import org.eclipse.apoapsis.ortserver.client.api.RepositoriesApi
 import org.eclipse.apoapsis.ortserver.client.api.RunsApi
+import org.eclipse.apoapsis.ortserver.client.api.SbomApi
 import org.eclipse.apoapsis.ortserver.client.api.VersionsApi
 import org.eclipse.apoapsis.ortserver.client.auth.AuthService
 
@@ -91,6 +92,9 @@ class OrtServerClient(
 
     /** Provide access to the runs API, allowing operations on runs in the ORT server. */
     val runs = RunsApi(client)
+
+    /** Provide access to the SBOM API, allowing to manage the SBOMs of repositories of type SBOM. */
+    val sbom = SbomApi(client)
 
     /** Provide access to the versions API. */
     val versions = VersionsApi(client)
