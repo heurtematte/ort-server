@@ -25,6 +25,7 @@ import org.eclipse.apoapsis.ortserver.workers.common.context.WorkerContext
 
 import org.ossreviewtoolkit.advisor.Advisor
 import org.ossreviewtoolkit.model.OrtResult
+import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.config.AdvisorConfiguration
 import org.ossreviewtoolkit.plugins.advisors.api.AdviceProviderFactory
 
@@ -56,6 +57,37 @@ internal class AdvisorRunner {
 
         val advisor = Advisor(providerFactories, advisorConfig)
 
-        return advisor.advise(ortResult, config.skipExcluded)
+        // Without an analyzer result, ORT only logs a warning and returns the result as it is.
+        if (ortResult.analyzer == null) return advisor.advise(ortResult, config.skipExcluded)
+
+        // Like ORT, give advice for the projects as packages, too, except for the projects that no advice provider can
+        // identify.
+        val (unidentifiableProjects, projects) = ortResult.getProjects(config.skipExcluded)
+            .partition { it.isSbomProjectWithoutRevision() }
+
+        if (unidentifiableProjects.isNotEmpty()) {
+            logger.info(
+                "Giving no advice for {} project(s) of type '{}' without VCS revision: {}.",
+                unidentifiableProjects.size,
+                SBOM_PROJECT_TYPE,
+                unidentifiableProjects.joinToString { it.id.toCoordinates() }
+            )
+        }
+
+        val packages = projects.mapTo(mutableSetOf()) { it.toPackage() } +
+            ortResult.getPackages(config.skipExcluded).mapTo(mutableSetOf()) { it.metadata }
+
+        return ortResult.copy(advisor = advisor.advise(packages))
     }
 }
+
+/** The type of the projects that the SBOM package manager creates for the components that an SBOM describes. */
+private const val SBOM_PROJECT_TYPE = "SBOM"
+
+/**
+ * Return whether this is a project created from an SBOM in a repository without VCS, such as a repository of type
+ * SBOM. Advice providers cannot identify such a project: projects have no purl, and without a VCS revision OSV takes
+ * the type of the project as the ecosystem to query, which it rejects as invalid for "SBOM".
+ */
+private fun Project.isSbomProjectWithoutRevision() =
+    id.type == SBOM_PROJECT_TYPE && vcsProcessed.revision.isEmpty()

@@ -20,13 +20,16 @@
 package org.eclipse.apoapsis.ortserver.workers.advisor
 
 import io.kotest.core.spec.style.WordSpec
+import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 
+import io.mockk.CapturingSlot
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
+import io.mockk.slot
 import io.mockk.unmockkAll
 import io.mockk.verify
 
@@ -40,8 +43,12 @@ import org.eclipse.apoapsis.ortserver.workers.common.context.WorkerContext
 
 import org.ossreviewtoolkit.model.AnalyzerResult
 import org.ossreviewtoolkit.model.AnalyzerRun
+import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.OrtResult
 import org.ossreviewtoolkit.model.Package
+import org.ossreviewtoolkit.model.Project
+import org.ossreviewtoolkit.model.VcsInfo
+import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.config.AdvisorConfiguration
 import org.ossreviewtoolkit.plugins.advisors.api.AdviceProvider
 import org.ossreviewtoolkit.plugins.advisors.api.AdviceProviderFactory
@@ -160,10 +167,55 @@ class AdvisorRunnerTest : WordSpec({
                 advisors = mapOf("OSV" to PluginConfig(osvConfig.options, emptyMap()).mapToOrt())
             )
         }
+
+        "give advice for projects and packages, except for projects of type SBOM without VCS revision" {
+            val requestedPackages = slot<Set<Package>>()
+            val osvFactory = mockAdviceProviderFactory("OSV", requestedPackages)
+            mockAdvisorAll(listOf(osvFactory))
+
+            val sbomProject = Project.EMPTY.copy(id = Identifier("SBOM:org.example:app:1.0.0"))
+            val sbomProjectWithRevision = Project.EMPTY.copy(
+                id = Identifier("SBOM:org.example:lib:2.0.0"),
+                vcsProcessed = VcsInfo(
+                    type = VcsType.GIT,
+                    url = "https://github.com/example/lib.git",
+                    revision = "0123456789abcdef0123456789abcdef01234567"
+                )
+            )
+            val mavenProject = Project.EMPTY.copy(id = Identifier("Maven:org.example:service:3.0.0"))
+            val pkg = Package.EMPTY.copy(
+                id = Identifier("Maven:org.example:library:1.2.3"),
+                purl = "pkg:maven/org.example/library@1.2.3"
+            )
+
+            val jobConfig = AdvisorJobConfiguration(advisors = listOf("OSV"))
+
+            runner.run(
+                mockContext(jobConfig),
+                OrtResult.EMPTY.copy(
+                    analyzer = AnalyzerRun.EMPTY.copy(
+                        result = AnalyzerResult.EMPTY.copy(
+                            projects = setOf(sbomProject, sbomProjectWithRevision, mavenProject),
+                            packages = setOf(pkg)
+                        )
+                    )
+                ),
+                jobConfig
+            )
+
+            requestedPackages.captured.map { it.id } shouldContainExactlyInAnyOrder listOf(
+                sbomProjectWithRevision.id,
+                mavenProject.id,
+                pkg.id
+            )
+        }
     }
 })
 
-private fun mockAdviceProviderFactory(adviceProviderName: String) =
+private fun mockAdviceProviderFactory(
+    adviceProviderName: String,
+    requestedPackages: CapturingSlot<Set<Package>> = slot()
+) =
     mockk<AdviceProviderFactory> {
         val pluginDescriptor =
             PluginDescriptor(id = adviceProviderName, displayName = adviceProviderName, summary = "", description = "")
@@ -172,7 +224,7 @@ private fun mockAdviceProviderFactory(adviceProviderName: String) =
 
         every { create(any()) } returns mockk<AdviceProvider> {
             every { descriptor } returns pluginDescriptor
-            coEvery { retrievePackageFindings(any()) } returns emptyMap()
+            coEvery { retrievePackageFindings(capture(requestedPackages)) } returns emptyMap()
         }
     }
 
