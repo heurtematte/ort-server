@@ -57,6 +57,9 @@ fun Route.sbomRoutes(
     getRepositorySbom(sbomStorageService)
     getRepositorySbomContent(sbomStorageService)
     deleteRepositorySbom(sbomStorageService)
+    getRepositorySbomVersions(sbomStorageService)
+    getRepositorySbomVersionContent(sbomStorageService)
+    postRepositorySbomVersionRestore(sbomStorageService)
     getRepositorySbomSource(sbomStorageService)
     putRepositorySbomSource(sbomStorageService, repositoryService, sbomSourceIdentification)
 }
@@ -70,6 +73,8 @@ internal fun RequestConfig.repositoryIdParameter() {
 
 internal fun StoredSbom.mapToApi() =
     RepositorySbom(
+        id = id,
+        current = current,
         fileName = fileName,
         format = format.displayName,
         mediaType = format.mediaType,

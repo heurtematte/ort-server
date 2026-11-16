@@ -19,13 +19,8 @@
 
 package org.eclipse.apoapsis.ortserver.components.sbom.routes
 
-import io.ktor.http.ContentDisposition
-import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.response.header
 import io.ktor.server.response.respond
-import io.ktor.server.response.respondBytes
 import io.ktor.server.routing.Route
 
 import org.eclipse.apoapsis.ortserver.components.authorization.rights.RepositoryPermission
@@ -98,28 +93,24 @@ internal fun Route.getRepositorySbomContent(sbomStorageService: SbomStorageServi
         return@get
     }
 
-    call.response.header(
-        HttpHeaders.ContentDisposition,
-        ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, metadata.fileName)
-            .toString()
-    )
-    call.respondBytes(content, ContentType.parse(metadata.format.mediaType))
+    call.respondSbomFile(metadata.fileName, metadata.format.mediaType, content)
 }
 
 internal fun Route.deleteRepositorySbom(sbomStorageService: SbomStorageService) = delete(
     "repositories/{repositoryId}/sbom",
     {
         operationId = "deleteRepositorySbom"
-        summary = "Delete the SBOM of a repository."
-        description = "Delete the SBOM uploaded for a repository of type SBOM. Afterwards, runs of the repository " +
-            "download the SBOM from the repository URL."
+        summary = "Stop using the uploaded SBOM of a repository."
+        description = "Stop using the current SBOM uploaded for a repository of type SBOM. Afterwards, runs of the " +
+            "repository download the SBOM from the repository URL. The SBOM stays in the history of the " +
+            "repository, so that it can be restored."
         tags = listOf(SBOM_TAG)
 
         request { repositoryIdParameter() }
 
         response {
             HttpStatusCode.NoContent to {
-                description = "The SBOM was deleted."
+                description = "The SBOM is no longer used."
             }
 
             HttpStatusCode.NotFound to {

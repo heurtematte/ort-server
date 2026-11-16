@@ -23,9 +23,15 @@ import kotlin.time.Instant
 
 import kotlinx.serialization.Serializable
 
-/** Information about the SBOM uploaded for a repository of type SBOM. */
+/** Information about an SBOM uploaded for a repository of type SBOM. */
 @Serializable
 data class RepositorySbom(
+    /** The ID of the upload, which identifies this version of the SBOM in the history of the repository. */
+    val id: Long,
+
+    /** Whether this is the current SBOM of the repository, which its runs analyze. */
+    val current: Boolean,
+
     /** The name of the uploaded file. */
     val fileName: String,
 

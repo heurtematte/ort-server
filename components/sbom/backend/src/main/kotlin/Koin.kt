@@ -29,7 +29,7 @@ import org.koin.dsl.module
  */
 val sbomStorageModule = module {
     single {
-        SbomStorageService(Storage.create(SbomStorageService.STORAGE_TYPE, get(), get()))
+        SbomStorageService(Storage.create(SbomStorageService.STORAGE_TYPE, get(), get()), get())
     }
 
     single { SbomSourceIdentification() }

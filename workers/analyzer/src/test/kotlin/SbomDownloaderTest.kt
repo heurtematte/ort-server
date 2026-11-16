@@ -49,6 +49,7 @@ import org.eclipse.apoapsis.ortserver.components.sbom.SbomStorageService
 import org.eclipse.apoapsis.ortserver.components.sbom.StoredSbomSource
 import org.eclipse.apoapsis.ortserver.components.sbom.sha256
 import org.eclipse.apoapsis.ortserver.config.ConfigManager
+import org.eclipse.apoapsis.ortserver.dao.test.DatabaseTestExtension
 import org.eclipse.apoapsis.ortserver.model.Repository
 import org.eclipse.apoapsis.ortserver.model.RepositoryType
 import org.eclipse.apoapsis.ortserver.model.repositories.RepositoryRepository
@@ -62,6 +63,7 @@ private const val PROJECT_UUID = "11111111-2222-3333-4444-555555555555"
 private const val OTHER_VERSION_UUID = "66666666-7777-8888-9999-000000000000"
 
 class SbomDownloaderTest : WordSpec({
+    val dbExtension = extension(DatabaseTestExtension())
     val server = WireMockServer(WireMockConfiguration.options().dynamicPort())
 
     beforeSpec { server.start() }
@@ -73,11 +75,17 @@ class SbomDownloaderTest : WordSpec({
 
     /** Return a storage service with the source of the given [type] identified for the repository [id] and [url]. */
     suspend fun identified(id: Long, url: String, type: SbomSourceType, apiUrl: String? = null) =
-        SbomStorageService(createTestStorage()).apply {
+        SbomStorageService(createTestStorage(), dbExtension.db).apply {
             storeSource(id, StoredSbomSource(type.id, url, apiUrl, "4.14.5", Clock.System.now()))
         }
 
     fun projectUrl() = "${server.baseUrl()}/projects/$PROJECT_UUID"
+
+    /** Create a repository of type SBOM with the given [url] in the database, where runs and uploads refer to it. */
+    suspend fun createSbomRepository(url: String) =
+        dbExtension.fixtures.createRepository(type = RepositoryType.SBOM, url = url, name = null).let {
+            sbomRepository(it.id, url)
+        }
 
     fun stubDependencyTrack() {
         val apiKey = equalTo("dt-api-key")
@@ -137,12 +145,13 @@ class SbomDownloaderTest : WordSpec({
 
     "download" should {
         "use the SBOM uploaded for the repository" {
-            val storageService = SbomStorageService(createTestStorage())
+            val storageService = SbomStorageService(createTestStorage(), dbExtension.db)
             val content = SbomFixtures.bytes(SbomFixtures.SPDX_2_3_YAML)
-            storageService.store(1L, content, "p2repo.spdx.yaml", null)
+            val repository = createSbomRepository("https://example.com/unused")
+            storageService.store(repository.id, content, "p2repo.spdx.yaml", null)
 
             val result = SbomDownloader(storageService).download(
-                sbomRepository(1L, "https://example.com/unused"),
+                repository,
                 "",
                 null,
                 tempdir(),
@@ -261,7 +270,7 @@ class SbomDownloaderTest : WordSpec({
 
         "fail if the source of the repository has not been identified" {
             shouldThrow<IOException> {
-                SbomDownloader(SbomStorageService(createTestStorage())).download(
+                SbomDownloader(SbomStorageService(createTestStorage(), dbExtension.db)).download(
                     sbomRepository(5L, projectUrl()),
                     "",
                     SbomCredentials("ignored", "dt-api-key")
@@ -295,24 +304,61 @@ class SbomDownloaderTest : WordSpec({
         }
 
         "name the repository after the component that an uploaded SBOM describes if it has no name" {
-            val storageService = SbomStorageService(createTestStorage())
+            val storageService = SbomStorageService(createTestStorage(), dbExtension.db)
             val content = """
                 {"bomFormat": "CycloneDX", "specVersion": "1.6", "version": 1,
                  "metadata": {"component": {"type": "application", "bom-ref": "app", "name": "my-product"}}}
             """.trimIndent().toByteArray()
-            storageService.store(14L, content, "bom.cdx.json", null)
+            val repository = createSbomRepository("upload:bom.cdx.json")
+            storageService.store(repository.id, content, "bom.cdx.json", null)
             val repositories = mockk<RepositoryRepository> {
-                coEvery { update(any(), name = any()) } returns sbomRepository(14L, "upload:bom.cdx.json", "my-product")
+                coEvery { update(any(), name = any()) } returns repository.copy(name = "my-product")
             }
 
-            SbomDownloader(storageService, repositories).download(sbomRepository(14L, "upload:bom.cdx.json"), "", null)
+            SbomDownloader(storageService, repositories).download(repository, "", null)
 
-            coVerify(exactly = 1) { repositories.update(14L, name = "my-product".asPresent()) }
+            coVerify(exactly = 1) { repositories.update(repository.id, name = "my-product".asPresent()) }
+        }
+
+        "record the uploaded SBOM as the one that the run analyzed" {
+            val storageService = SbomStorageService(createTestStorage(), dbExtension.db)
+            val content = SbomFixtures.bytes(SbomFixtures.SPDX_2_3_YAML)
+            val repository = createSbomRepository("upload:p2repo.spdx.yaml")
+            val uploaded = storageService.store(repository.id, content, "p2repo.spdx.yaml", null)
+            val runId = dbExtension.fixtures.createOrtRun(repository.id).id
+
+            SbomDownloader(storageService).download(repository, "", null, ortRunId = runId)
+
+            val (runSbom, runContent) = storageService.getRunSbomContent(runId).shouldNotBeNull()
+            runSbom.fileName shouldBe "p2repo.spdx.yaml"
+            runSbom.uploadedSbomId shouldBe uploaded.id
+            runSbom.sourceUrl shouldBe null
+            runContent shouldBe content
+        }
+
+        "record the SBOM obtained from the source as the one that the run analyzed" {
+            stubDependencyTrack()
+            val repository = createSbomRepository(projectUrl())
+            val storageService = identified(repository.id, projectUrl(), SbomSourceType.DEPENDENCY_TRACK)
+            val runId = dbExtension.fixtures.createOrtRun(repository.id).id
+
+            val result = SbomDownloader(storageService).download(
+                repository,
+                "",
+                SbomCredentials("ignored", "dt-api-key"),
+                ortRunId = runId
+            )
+
+            val (runSbom, runContent) = storageService.getRunSbomContent(runId).shouldNotBeNull()
+            runSbom.fileName shouldBe "imap-2.0.3.cdx.json"
+            runSbom.uploadedSbomId shouldBe null
+            runSbom.sourceUrl shouldBe projectUrl()
+            "sha256:${runContent.sha256()}" shouldBe result.resolvedRevision
         }
 
         "fail if no SBOM was uploaded for a repository whose SBOM is only uploaded" {
             shouldThrow<IOException> {
-                SbomDownloader(SbomStorageService(createTestStorage())).download(
+                SbomDownloader(SbomStorageService(createTestStorage(), dbExtension.db)).download(
                     sbomRepository(15L, "upload:bom.cdx.json"),
                     "",
                     null

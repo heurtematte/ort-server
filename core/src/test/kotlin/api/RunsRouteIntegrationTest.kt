@@ -108,6 +108,9 @@ import org.eclipse.apoapsis.ortserver.api.v1.model.Severity as ApiSeverity
 import org.eclipse.apoapsis.ortserver.api.v1.model.VulnerabilityRating
 import org.eclipse.apoapsis.ortserver.api.v1.model.VulnerabilityWithDetails
 import org.eclipse.apoapsis.ortserver.components.authorization.rights.RepositoryRole
+import org.eclipse.apoapsis.ortserver.components.sbom.RunSbom
+import org.eclipse.apoapsis.ortserver.components.sbom.SbomStorageService
+import org.eclipse.apoapsis.ortserver.components.sbom.sha256
 import org.eclipse.apoapsis.ortserver.config.ConfigManager
 import org.eclipse.apoapsis.ortserver.dao.utils.toDatabasePrecision
 import org.eclipse.apoapsis.ortserver.logaccess.LogFileCriteria
@@ -185,6 +188,8 @@ import org.eclipse.apoapsis.ortserver.shared.ktorutils.shouldHaveBody
 import org.eclipse.apoapsis.ortserver.storage.Key
 import org.eclipse.apoapsis.ortserver.storage.Storage
 import org.eclipse.apoapsis.ortserver.utils.test.Integration
+import org.eclipse.apoapsis.sbom.parser.SbomFixtures
+import org.eclipse.apoapsis.sbom.parser.SbomParser
 
 import org.ossreviewtoolkit.utils.common.ArchiveType
 import org.ossreviewtoolkit.utils.common.unpack
@@ -896,6 +901,80 @@ class RunsRouteIntegrationTest : AbstractIntegrationTest({
 
             requestShouldRequireRole(RepositoryRole.READER, hierarchyId) {
                 get("/api/v1/runs/${run.id}/reporter/$reportFile")
+            }
+        }
+    }
+
+    "GET /runs/{runId}/sbom" should {
+        /** Create a run that analyzed an SBOM uploaded for its repository, and return it with the SBOM content. */
+        suspend fun createRunWithSbom(): Pair<OrtRun, ByteArray> {
+            val sbomStorageService = SbomStorageService(
+                Storage.create(
+                    SbomStorageService.STORAGE_TYPE,
+                    ConfigManager.create(ConfigFactory.load("application-test.conf")),
+                    dbExtension.db
+                ),
+                dbExtension.db
+            )
+            val content = SbomFixtures.bytes(SbomFixtures.CYCLONEDX_1_4_JSON)
+            val uploaded = sbomStorageService.store(repositoryId, content, "imap.cdx.json", null)
+            val run = dbExtension.fixtures.createOrtRun(repositoryId)
+            sbomStorageService.storeRunSbom(
+                run.id,
+                repositoryId,
+                content,
+                SbomParser.parse(content),
+                "imap.cdx.json",
+                uploaded,
+                null
+            )
+
+            return run to content
+        }
+
+        "return information about the SBOM that the run analyzed" {
+            integrationTestApplication {
+                val (run, content) = createRunWithSbom()
+
+                val response = superuserClient.get("/api/v1/runs/${run.id}/sbom")
+
+                response shouldHaveStatus HttpStatusCode.OK
+                with(response.body<RunSbom>()) {
+                    fileName shouldBe "imap.cdx.json"
+                    format shouldBe "CycloneDX JSON"
+                    sha256 shouldBe content.sha256()
+                    uploadedSbomId.shouldNotBeNull()
+                    sourceUrl shouldBe null
+                }
+            }
+        }
+
+        "download the SBOM that the run analyzed" {
+            integrationTestApplication {
+                val (run, content) = createRunWithSbom()
+
+                val response = superuserClient.get("/api/v1/runs/${run.id}/sbom/content")
+
+                response shouldHaveStatus HttpStatusCode.OK
+                response.body<ByteArray>() shouldBe content
+                response should haveHeader("Content-Type", "application/vnd.cyclonedx+json")
+            }
+        }
+
+        "respond with NotFound if the run did not analyze an SBOM" {
+            integrationTestApplication {
+                val run = dbExtension.fixtures.createOrtRun(repositoryId)
+
+                superuserClient.get("/api/v1/runs/${run.id}/sbom") shouldHaveStatus HttpStatusCode.NotFound
+                superuserClient.get("/api/v1/runs/${run.id}/sbom/content") shouldHaveStatus HttpStatusCode.NotFound
+            }
+        }
+
+        "require RepositoryPermission.READ_ORT_RUNS" {
+            val (run, _) = createRunWithSbom()
+
+            requestShouldRequireRole(RepositoryRole.READER, hierarchyId) {
+                get("/api/v1/runs/${run.id}/sbom")
             }
         }
     }

@@ -60,6 +60,7 @@ import org.eclipse.apoapsis.ortserver.api.v1.model.Vulnerability
 import org.eclipse.apoapsis.ortserver.api.v1.model.VulnerabilityRating
 import org.eclipse.apoapsis.ortserver.api.v1.model.VulnerabilityReference
 import org.eclipse.apoapsis.ortserver.api.v1.model.VulnerabilityWithDetails
+import org.eclipse.apoapsis.ortserver.components.sbom.RunSbom
 import org.eclipse.apoapsis.ortserver.shared.apimodel.AppliedIssueResolution
 import org.eclipse.apoapsis.ortserver.shared.apimodel.AppliedRuleViolationResolution
 import org.eclipse.apoapsis.ortserver.shared.apimodel.AppliedVulnerabilityResolution
@@ -1103,6 +1104,67 @@ val getRunPackageLicenses: RouteConfig.() -> Unit = {
 
         HttpStatusCode.NotFound to {
             description = "The ORT run does not exist."
+        }
+    }
+}
+
+val getRunSbom: RouteConfig.() -> Unit = {
+    operationId = "getRunSbom"
+    summary = "Get information about the SBOM that an ORT run analyzed"
+    description = "Get the metadata of the SBOM that a run of a repository of type SBOM analyzed: the uploaded SBOM " +
+        "or the SBOM obtained from the source of the repository."
+    tags = listOf("Runs")
+
+    request {
+        pathParameter<Long>("runId") {
+            description = "The ID of the ORT run."
+        }
+    }
+
+    response {
+        HttpStatusCode.OK to {
+            description = "Success."
+            jsonBody<RunSbom> {
+                example("Get the SBOM of an ORT run") {
+                    value = RunSbom(
+                        fileName = "bom.cdx.json",
+                        format = "CycloneDX JSON",
+                        mediaType = "application/vnd.cyclonedx+json",
+                        specVersion = "1.6",
+                        size = 48213,
+                        sha256 = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+                        componentCount = 142,
+                        uploadedSbomId = 12,
+                        analyzedAt = Instant.parse("2026-11-16T10:15:04Z")
+                    )
+                }
+            }
+        }
+
+        HttpStatusCode.NotFound to {
+            description = "The ORT run does not exist or did not analyze an SBOM."
+        }
+    }
+}
+
+val getRunSbomContent: RouteConfig.() -> Unit = {
+    operationId = "getRunSbomContent"
+    summary = "Download the SBOM that an ORT run analyzed"
+    tags = listOf("Runs")
+
+    request {
+        pathParameter<Long>("runId") {
+            description = "The ID of the ORT run."
+        }
+    }
+
+    response {
+        HttpStatusCode.OK to {
+            description = "The SBOM document."
+        }
+
+        HttpStatusCode.NotFound to {
+            description = "The ORT run does not exist or did not analyze an SBOM."
         }
     }
 }

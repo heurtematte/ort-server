@@ -331,7 +331,7 @@ class AnalyzerWorkerTest : StringSpec({
 
         val downloader = mockk<AnalyzerDownloader>()
         val sbomDownloader = mockk<SbomDownloader> {
-            coEvery { download(sbomRepository, "main", null, null, null) } returns
+            coEvery { download(sbomRepository, "main", null, null, null, ortRun.id) } returns
                     DownloadResult(sbomDir, "main", "sha256:0123")
         }
 

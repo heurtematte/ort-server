@@ -84,21 +84,23 @@ class SbomDownloader(
     /**
      * Obtain the SBOM of the given [repository] for the requested [revision], using the optional [credentials] to
      * access its source. Store it in a new download directory below the optional [targetDir] whose name is derived
-     * from the given [runId], so that later phases can find it. The revision of the result is the requested one or,
-     * if none was requested, the version of the project or component of the source, or of the component described by
-     * the SBOM; the resolved revision is the SHA-256 checksum of the SBOM.
+     * from the given [runId], so that later phases can find it. If an [ortRunId] is given, record the SBOM as the one
+     * that this run analyzed, so that it can be traced and downloaded later. The revision of the result is the
+     * requested one or, if none was requested, the version of the project or component of the source, or of the
+     * component described by the SBOM; the resolved revision is the SHA-256 checksum of the SBOM.
      */
     suspend fun download(
         repository: Repository,
         revision: String,
         credentials: SbomCredentials?,
         targetDir: File? = null,
-        runId: Long? = null
+        runId: Long? = null,
+        ortRunId: Long? = null
     ): DownloadResult {
         val outputDir = createTempDirectory(targetDir?.toPath(), AnalyzerDownloader.downloadDirName(runId)).toFile()
 
         val uploaded = sbomStorageService.downloadTo(repository.id, outputDir)
-        val (file, versionFromSource) = if (uploaded != null) {
+        val obtained = if (uploaded != null) {
             logger.info(
                 "Using the SBOM '{}' uploaded for repository '{}' at {}.",
                 uploaded.second.fileName,
@@ -106,17 +108,35 @@ class SbomDownloader(
                 uploaded.second.uploadedAt
             )
 
-            uploaded.first to null
+            ObtainedSbom(uploaded.first, uploaded.second.fileName, version = null)
         } else {
             fetchFromSource(repository, revision, credentials, outputDir)
         }
 
+        val file = obtained.file
         val document = SbomParser.parse(file)
         if (uploaded != null) nameRepository(repository, document.describedName())
 
         val rootVersion = document.roots.firstNotNullOfOrNull { document.components[it]?.version }
-        val initRevision = revision.ifEmpty { versionFromSource ?: rootVersion.orEmpty() }
-        val resolvedRevision = "sha256:${file.readBytes().sha256()}"
+        val initRevision = revision.ifEmpty { obtained.version ?: rootVersion.orEmpty() }
+        val content = file.readBytes()
+        val resolvedRevision = "sha256:${content.sha256()}"
+
+        if (ortRunId != null) {
+            runCatching {
+                sbomStorageService.storeRunSbom(
+                    ortRunId = ortRunId,
+                    repositoryId = repository.id,
+                    content = content,
+                    document = document,
+                    fileName = obtained.fileName,
+                    uploaded = uploaded?.second,
+                    sourceUrl = repository.url.trim()
+                )
+            }.onFailure {
+                logger.warn("Could not record the SBOM that run '{}' analyzed.", ortRunId, it)
+            }
+        }
 
         logger.info(
             "Obtained {} {} SBOM with {} components for repository '{}' (revision '{}', {}).",
@@ -133,14 +153,13 @@ class SbomDownloader(
 
     /**
      * Retrieve the SBOM of the identified source of the given [repository] for the given [revision] into [outputDir].
-     * Return the file and the version of the project or component of the source.
      */
     private suspend fun fetchFromSource(
         repository: Repository,
         revision: String,
         credentials: SbomCredentials?,
         outputDir: File
-    ): Pair<File, String?> {
+    ): ObtainedSbom {
         if (repository.isSbomUploadOnly) {
             throw IOException(
                 "No SBOM was uploaded for repository '${repository.id}', whose SBOM is only uploaded. Upload it on " +
@@ -174,7 +193,14 @@ class SbomDownloader(
         val file = outputDir.resolve("sbom.${fetched.format.fileExtension}")
         Files.move(fetched.file.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
 
-        return file to fetched.version
+        // Name the SBOM after what it describes for users who download it from the run.
+        val fileName = listOfNotNull(fetched.name, fetched.version).joinToString("-")
+            .replace(INVALID_FILE_NAME_CHARACTERS, "_")
+            .takeUnless { it.isEmpty() }
+            ?.let { "$it.${fetched.format.fileExtension}" }
+            ?: file.name
+
+        return ObtainedSbom(file, fileName, fetched.version)
     }
 
     /** Name the given [repository] after its SBOM with the given [name] if the repository has no name yet. */
@@ -192,6 +218,15 @@ class SbomDownloader(
         }
     }
 }
+
+/**
+ * An SBOM obtained for a run: the [file] it was stored in, the [fileName] to show to users, and the [version] of the
+ * project or component of its source, if it was obtained from a source.
+ */
+private class ObtainedSbom(val file: File, val fileName: String, val version: String?)
+
+/** Characters that are replaced in the names of SBOM files derived from their source. */
+private val INVALID_FILE_NAME_CHARACTERS = Regex("[^A-Za-z0-9._+-]")
 
 /** Return the name of the first component that this document describes, or the name of the document. */
 private fun SbomDocument.describedName(): String? =

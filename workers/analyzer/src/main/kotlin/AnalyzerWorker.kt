@@ -139,7 +139,8 @@ internal class AnalyzerWorker(
                 ortRun.revision,
                 findSbomCredentials(context, environmentService, repositoryServices, repository.url),
                 targetDir = downloadDir,
-                runId = ortRun.id.takeUnless { downloadDir == null }
+                runId = ortRun.id.takeUnless { downloadDir == null },
+                ortRunId = ortRun.id
             )
         } else {
             downloader.downloadRepository(

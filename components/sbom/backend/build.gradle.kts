@@ -34,6 +34,11 @@ dependencies {
 
     api(libs.koin.core)
 
+    implementation(projects.dao)
+
+    implementation(libs.exposed.core)
+    implementation(libs.exposed.json)
+    implementation(libs.exposed.kotlinDatetime)
     implementation(libs.kotlinx.serialization.json)
 
     routesApi(projects.model)

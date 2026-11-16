@@ -96,6 +96,7 @@ dependencies {
             requireCapability("$group:routes:$version")
         }
     }
+    implementation(projects.components.sbom.sbomApiModel)
     implementation(projects.components.sbom.sbomBackend)
     implementation(projects.components.sbom.sbomBackend) {
         capabilities {

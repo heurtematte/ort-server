@@ -28,6 +28,7 @@ import io.ktor.client.request.delete
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.request.get
+import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsBytes
@@ -80,7 +81,7 @@ class SbomRoutesIntegrationTest : AbstractIntegrationTest({
     }
 
     fun sbomTestApplication(
-        sbomStorageService: SbomStorageService = SbomStorageService(createStorage()),
+        sbomStorageService: SbomStorageService = SbomStorageService(createStorage(), dbExtension.db),
         block: suspend io.ktor.server.testing.ApplicationTestBuilder.(client: io.ktor.client.HttpClient) -> Unit
     ) = integrationTestApplication(
         routes = { sbomRoutes(sbomStorageService, repositoryService, SbomSourceIdentification()) },
@@ -159,7 +160,7 @@ class SbomRoutesIntegrationTest : AbstractIntegrationTest({
         }
 
         "reject SBOMs exceeding the maximum size" {
-            sbomTestApplication(SbomStorageService(createStorage(), maxSize = 1000)) { client ->
+            sbomTestApplication(SbomStorageService(createStorage(), dbExtension.db, maxSize = 1000)) { client ->
                 val response = client.put("/repositories/$sbomRepositoryId/sbom") {
                     setBody(SbomFixtures.bytes(SbomFixtures.CYCLONEDX_1_4_JSON))
                 }
@@ -209,6 +210,78 @@ class SbomRoutesIntegrationTest : AbstractIntegrationTest({
                 client.delete("/repositories/$sbomRepositoryId/sbom") shouldHaveStatus HttpStatusCode.NoContent
                 client.get("/repositories/$sbomRepositoryId/sbom") shouldHaveStatus HttpStatusCode.NotFound
                 client.delete("/repositories/$sbomRepositoryId/sbom") shouldHaveStatus HttpStatusCode.NotFound
+            }
+        }
+    }
+
+    "GET /repositories/{repositoryId}/sbom/versions" should {
+        "return the history of the uploaded SBOMs, the latest first" {
+            sbomTestApplication { client ->
+                val first = client.put("/repositories/$sbomRepositoryId/sbom?fileName=first.cdx.json") {
+                    setBody(SbomFixtures.bytes(SbomFixtures.CYCLONEDX_1_6_JSON))
+                }.body<RepositorySbom>()
+                val second = client.put("/repositories/$sbomRepositoryId/sbom?fileName=second.spdx.json") {
+                    setBody(SbomFixtures.bytes(SbomFixtures.SPDX_2_3_JSON))
+                }.body<RepositorySbom>()
+
+                val response = client.get("/repositories/$sbomRepositoryId/sbom/versions")
+
+                response shouldHaveStatus HttpStatusCode.OK
+                response.body<List<RepositorySbom>>() shouldBe listOf(second, first.copy(current = false))
+            }
+        }
+    }
+
+    "GET /repositories/{repositoryId}/sbom/versions/{sbomId}/content" should {
+        "download an SBOM from the history" {
+            sbomTestApplication { client ->
+                val content = SbomFixtures.bytes(SbomFixtures.CYCLONEDX_1_6_JSON)
+                val first = client.put("/repositories/$sbomRepositoryId/sbom?fileName=first.cdx.json") {
+                    setBody(content)
+                }.body<RepositorySbom>()
+                client.put("/repositories/$sbomRepositoryId/sbom") {
+                    setBody(SbomFixtures.bytes(SbomFixtures.SPDX_2_3_JSON))
+                } shouldHaveStatus HttpStatusCode.OK
+
+                val download = client.get("/repositories/$sbomRepositoryId/sbom/versions/${first.id}/content")
+
+                download shouldHaveStatus HttpStatusCode.OK
+                download.bodyAsBytes() shouldBe content
+                download.headers[HttpHeaders.ContentDisposition] shouldContain "first.cdx.json"
+            }
+        }
+
+        "respond with NotFound for an unknown SBOM" {
+            sbomTestApplication { client ->
+                client.get("/repositories/$sbomRepositoryId/sbom/versions/4711/content") shouldHaveStatus
+                    HttpStatusCode.NotFound
+            }
+        }
+    }
+
+    "POST /repositories/{repositoryId}/sbom/versions/{sbomId}/restore" should {
+        "make an SBOM from the history the current SBOM again" {
+            sbomTestApplication { client ->
+                val first = client.put("/repositories/$sbomRepositoryId/sbom?fileName=first.cdx.json") {
+                    setBody(SbomFixtures.bytes(SbomFixtures.CYCLONEDX_1_6_JSON))
+                }.body<RepositorySbom>()
+                client.put("/repositories/$sbomRepositoryId/sbom") {
+                    setBody(SbomFixtures.bytes(SbomFixtures.SPDX_2_3_JSON))
+                } shouldHaveStatus HttpStatusCode.OK
+                client.delete("/repositories/$sbomRepositoryId/sbom") shouldHaveStatus HttpStatusCode.NoContent
+
+                val response = client.post("/repositories/$sbomRepositoryId/sbom/versions/${first.id}/restore")
+
+                response shouldHaveStatus HttpStatusCode.OK
+                response.body<RepositorySbom>() shouldBe first
+                client.get("/repositories/$sbomRepositoryId/sbom").body<RepositorySbom>() shouldBe first
+            }
+        }
+
+        "respond with NotFound for an unknown SBOM" {
+            sbomTestApplication { client ->
+                client.post("/repositories/$sbomRepositoryId/sbom/versions/4711/restore") shouldHaveStatus
+                    HttpStatusCode.NotFound
             }
         }
     }

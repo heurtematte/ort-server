@@ -182,10 +182,14 @@ fun Route.repositories() = route("repositories/{repositoryId}") {
         val id = call.requireIdParameter("repositoryId")
 
         val repository = repositoryService.getRepository(id)
+        val isSbomRepository = repository?.type == RepositoryType.SBOM
+
+        // The SBOMs stored for the repository are known from records that are deleted together with the repository.
+        val sbomContents = if (isSbomRepository) sbomStorageService.listContents(id) else emptySet()
         repositoryService.deleteRepository(id)
 
-        // Remove the SBOM of the repository, if any, as it can no longer be referenced.
-        if (repository?.type == RepositoryType.SBOM) sbomStorageService.deleteAll(id)
+        // Remove the SBOMs of the repository, as they can no longer be referenced.
+        if (isSbomRepository) sbomStorageService.deleteAll(id, sbomContents)
 
         call.respond(HttpStatusCode.NoContent)
     }
