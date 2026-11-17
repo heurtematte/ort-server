@@ -41,11 +41,11 @@ dependencies {
     implementation(libs.exposed.kotlinDatetime)
     implementation(libs.kotlinx.serialization.json)
 
+    routesApi(projects.components.sbom.sbomApiModel)
     routesApi(projects.model)
     routesApi(projects.services.hierarchyService)
 
     routesImplementation(projects.components.authorization.authorizationBackend)
-    routesImplementation(projects.components.sbom.sbomApiModel)
     routesImplementation(projects.shared.ktorUtils)
 
     routesImplementation(ktorLibs.server.core)
