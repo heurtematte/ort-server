@@ -40,6 +40,12 @@ import {
  */
 export const UNMANAGED_PACKAGE_MANAGER_ID = 'Unmanaged';
 
+/**
+ * The ID of the package manager that analyzes the SBOM of a repository of type SBOM. It is the only
+ * package manager used for such a repository.
+ */
+export const SBOM_PACKAGE_MANAGER_ID = 'SBOM';
+
 function isNonBlankString(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== '';
 }

@@ -3,7 +3,7 @@
 
 
 ### Setup for osc
-set -l osc_subcommands 'auth runs'
+set -l osc_subcommands 'auth runs sbom'
 
 ## Options for osc
 complete -c osc -n "not __fish_seen_subcommand_from $osc_subcommands" -l version -s v -d 'Show the version of the CLI and the ORT Server if authenticated.'
@@ -100,4 +100,39 @@ complete -c osc -n "__fish_seen_subcommand_from start" -l wait -d 'Wait for the 
 complete -c osc -n "__fish_seen_subcommand_from start" -l parameters-file -r -F -d 'The path to a JSON file containing the run configuration (see https://eclipse-apoapsis.github.io/ort-server/api/post-repository-run).'
 complete -c osc -n "__fish_seen_subcommand_from start" -l parameters -r -d 'The run configuration as a JSON string (see https://eclipse-apoapsis.github.io/ort-server/api/post-repository-run).'
 complete -c osc -n "__fish_seen_subcommand_from start" -s h -l help -d 'Show this message and exit'
+
+
+### Setup for sbom
+set -l osc_sbom_subcommands 'download info upload'
+complete -c osc -f -n __fish_use_subcommand -a sbom -d 'Commands to manage the SBOM of a repository of type SBOM.'
+
+## Options for sbom
+complete -c osc -n "__fish_seen_subcommand_from sbom" -s h -l help -d 'Show this message and exit'
+
+
+### Setup for download
+complete -c osc -f -n "__fish_seen_subcommand_from sbom; and not __fish_seen_subcommand_from $osc_sbom_subcommands" -a download -d 'Download the SBOM uploaded for a repository of type SBOM, as it was uploaded.'
+
+## Options for download
+complete -c osc -n "__fish_seen_subcommand_from download" -l repository-id -r -d 'The ID of the repository of type SBOM.'
+complete -c osc -n "__fish_seen_subcommand_from download" -l output -s o -r -F -d 'The path of the file to save the SBOM to. Missing parent directories are created.'
+complete -c osc -n "__fish_seen_subcommand_from download" -s h -l help -d 'Show this message and exit'
+
+
+### Setup for info
+complete -c osc -f -n "__fish_seen_subcommand_from sbom; and not __fish_seen_subcommand_from $osc_sbom_subcommands" -a info -d 'Print information about the SBOM uploaded for a repository of type SBOM.'
+
+## Options for info
+complete -c osc -n "__fish_seen_subcommand_from info" -l repository-id -r -d 'The ID of the repository of type SBOM.'
+complete -c osc -n "__fish_seen_subcommand_from info" -s h -l help -d 'Show this message and exit'
+
+
+### Setup for upload
+complete -c osc -f -n "__fish_seen_subcommand_from sbom; and not __fish_seen_subcommand_from $osc_sbom_subcommands" -a upload -d 'Upload the SBOM of a repository of type SBOM, replacing its current SBOM.'
+
+## Options for upload
+complete -c osc -n "__fish_seen_subcommand_from upload" -l repository-id -r -d 'The ID of the repository of type SBOM.'
+complete -c osc -n "__fish_seen_subcommand_from upload" -l file -r -F -d 'The path to the SBOM file to upload.'
+complete -c osc -n "__fish_seen_subcommand_from upload" -l file-name -r -d 'The file name to store with the SBOM. If not provided, the name of the uploaded file is used.'
+complete -c osc -n "__fish_seen_subcommand_from upload" -s h -l help -d 'Show this message and exit'
 

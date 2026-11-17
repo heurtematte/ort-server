@@ -125,6 +125,50 @@ To retrieve reports from a completed ORT run, execute:
 osc runs download reports --file-names scan-report-web-app.html --output-dir /tmp
 ```
 
+### Managing the SBOM of an SBOM Repository
+
+For a [repository of type SBOM](concepts/sbom-repositories.md), the `sbom` commands manage the SBOM that the runs of the repository analyze.
+
+To upload an SBOM, replacing the current one, execute:
+
+```shell
+osc sbom upload --repository-id <REPOSITORY_ID> --file bom.cdx.json
+```
+
+The format of the SBOM is detected from its content.
+The server validates the SBOM before storing it: if the file is not a supported SBOM, or the repository is not of type SBOM, the command fails with the reason given by the server.
+Otherwise, it prints information about the stored SBOM: its file name, format and version, the number of components, its size, its SHA-256 checksum, and warnings about problems that did not prevent it from being accepted.
+With `--json`, this information is printed as JSON.
+The file name stored with the SBOM is the name of the uploaded file, unless another one is given with `--file-name`.
+
+To print information about the current SBOM, or to download it, execute:
+
+```shell
+osc sbom info --repository-id <REPOSITORY_ID>
+osc sbom download --repository-id <REPOSITORY_ID> --output bom.cdx.json
+```
+
+Both commands fail if no SBOM has been uploaded for the repository.
+
+In a CI pipeline, upload the SBOM produced by the build and start a run that analyzes it:
+
+```shell
+osc sbom upload --repository-id 42 --file build/bom.cdx.json && \
+  osc runs start --repository-id 42 --wait --parameters '{
+    "revision": "",
+    "jobConfigs": {
+      "analyzer": {},
+      "advisor": {},
+      "evaluator": {},
+      "reporter": {}
+    }
+  }'
+```
+
+As `osc` exits with a non-zero code if the upload fails, no run is started for an invalid SBOM.
+Both commands also read the repository ID from the `OSC_REPOSITORY_ID` environment variable, so that `--repository-id` can be omitted if it is set.
+For an uploaded SBOM, the revision of a run is only a label: if it is empty, it is set to the version of the component that the SBOM describes.
+
 ### Environment Variables
 
 For automated environments like CI/CD pipelines, all command-line arguments can be configured using environment variables.  

@@ -25,9 +25,11 @@ import org.eclipse.apoapsis.ortserver.config.ConfigManager
 import org.eclipse.apoapsis.ortserver.dao.transaction
 import org.eclipse.apoapsis.ortserver.model.JobConfigurations
 import org.eclipse.apoapsis.ortserver.model.OrtRun
+import org.eclipse.apoapsis.ortserver.model.RepositoryType
 import org.eclipse.apoapsis.ortserver.model.User
 import org.eclipse.apoapsis.ortserver.model.orchestrator.CreateOrtRun
 import org.eclipse.apoapsis.ortserver.model.repositories.OrtRunRepository
+import org.eclipse.apoapsis.ortserver.model.repositories.RepositoryRepository
 import org.eclipse.apoapsis.ortserver.model.runs.repository.RunIncludesExcludes
 import org.eclipse.apoapsis.ortserver.transport.Message
 import org.eclipse.apoapsis.ortserver.transport.MessageHeader
@@ -42,6 +44,7 @@ import org.slf4j.MDC
 class OrchestratorService(
     private val db: Database,
     private val ortRunRepository: OrtRunRepository,
+    private val repositoryRepository: RepositoryRepository,
     configManager: ConfigManager
 ) {
     private val orchestratorSender by lazy { MessageSenderFactory.createSender(OrchestratorEndpoint, configManager) }
@@ -50,7 +53,8 @@ class OrchestratorService(
      * Create an ORT run in the database and notify the Orchestrator to handle this run. The
      * [resolvedJobConfigContext] is the result of resolving the requested [jobConfigContext] and determines the
      * configuration used by the run. The [includesExcludes] are applied in addition to those from the repository
-     * configuration file.
+     * configuration file. For a repository of type SBOM, the [jobConfig] of the analyzer is restricted to the SBOM
+     * package manager, as only this package manager analyzes its SBOM.
      */
     suspend fun createOrtRun(
         repositoryId: Long,
@@ -66,13 +70,16 @@ class OrchestratorService(
     ): OrtRun {
         val traceId = MDC.get("traceId")
 
+        val repositoryType = repositoryRepository.get(repositoryId)?.type
+        val runJobConfig = if (repositoryType == RepositoryType.SBOM) jobConfig.forSbomRepository() else jobConfig
+
         val ortRun = db.transaction(transactionIsolation = Connection.TRANSACTION_SERIALIZABLE) {
             maxAttempts = 25
             ortRunRepository.create(
                 repositoryId,
                 revision,
                 path,
-                jobConfig,
+                runJobConfig,
                 jobConfigContext,
                 labels.orEmpty(),
                 traceId = traceId,

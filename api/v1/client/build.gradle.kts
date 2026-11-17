@@ -38,6 +38,7 @@ kotlin {
         commonMain {
             dependencies {
                 api(projects.api.v1.apiV1Model)
+                api(projects.components.sbom.sbomApiModel)
 
                 implementation(projects.utils.system)
 

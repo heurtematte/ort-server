@@ -29,7 +29,10 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.types.shouldBeSameInstanceAs
 
+import java.sql.SQLException
+
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Duration
 
 import org.eclipse.apoapsis.ortserver.config.ConfigManager
 import org.eclipse.apoapsis.ortserver.config.ConfigSecretProviderFactoryForTesting
@@ -43,6 +46,7 @@ import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.transactions.transactionManager
 
 import org.koin.dsl.module
 import org.koin.test.KoinTest
@@ -180,6 +184,84 @@ class DatabaseTest : KoinTest, WordSpec() {
                         throw Error("Test error")
                     }
                 }
+            }
+        }
+
+        "transactionWithRetry" should {
+            "retry a transaction that failed because of a deadlock" {
+                // Exposed itself repeats a transaction that failed with an SQL exception that many times.
+                val exposedAttempts = dbExtension.db.transactionManager.defaultMaxAttempts
+                var attempts = 0
+
+                val result = dbExtension.db.transactionWithRetry(maxDelay = Duration.ZERO) {
+                    attempts++
+                    if (attempts <= exposedAttempts) {
+                        throw SQLException("deadlock detected", PostgresErrorCodes.DEADLOCK_DETECTED.value)
+                    }
+
+                    OrganizationsTable.insert {
+                        it[name] = "name"
+                        it[description] = "description"
+                    }
+
+                    "result"
+                }
+
+                result shouldBe "result"
+                attempts shouldBe exposedAttempts + 1
+                dbExtension.db.transaction { OrganizationsTable.selectAll().count() } shouldBe 1
+            }
+
+            "retry a transaction that failed because a concurrent transaction inserted the same row" {
+                dbExtension.db.transaction {
+                    OrganizationsTable.insert {
+                        it[name] = "name"
+                        it[description] = "description"
+                    }
+                }
+
+                var attempts = 0
+
+                dbExtension.db.transactionWithRetry(maxDelay = Duration.ZERO) {
+                    attempts++
+
+                    // Simulate a transaction that did not see the row inserted concurrently.
+                    if (attempts == 1) {
+                        OrganizationsTable.insert {
+                            it[name] = "name"
+                            it[description] = "description"
+                        }
+                    }
+                }
+
+                attempts shouldBe 2
+            }
+
+            "give up after the maximum number of attempts" {
+                val exposedAttempts = dbExtension.db.transactionManager.defaultMaxAttempts
+                var attempts = 0
+
+                shouldThrow<SQLException> {
+                    dbExtension.db.transactionWithRetry(maxAttempts = 3, maxDelay = Duration.ZERO) {
+                        attempts++
+                        throw SQLException("deadlock detected", PostgresErrorCodes.DEADLOCK_DETECTED.value)
+                    }
+                }
+
+                attempts shouldBe 3 * exposedAttempts
+            }
+
+            "not retry other failures" {
+                var attempts = 0
+
+                shouldThrow<RuntimeException> {
+                    dbExtension.db.transactionWithRetry(maxDelay = Duration.ZERO) {
+                        attempts++
+                        throw RuntimeException("Test exception")
+                    }
+                }
+
+                attempts shouldBe 1
             }
         }
     }

@@ -369,6 +369,56 @@ describe('formValuesToPayload', () => {
     expect(payload.jobConfigs.analyzer?.packageManagerOptions).toBeUndefined();
   });
 
+  it('enables only the SBOM package manager for an SBOM repository', () => {
+    const values = createFormValues();
+    values.jobConfigs.analyzer.packageManagers = ['SBOM'];
+    values.jobConfigs.analyzer.packageManagerConfig = {
+      SBOM: { options: { failFast: true }, secrets: {} },
+    };
+
+    const payload = formValuesToPayload(values, [], true);
+
+    expect(payload.jobConfigs.analyzer?.enabledPackageManagers).toEqual([
+      'SBOM',
+    ]);
+    expect(payload.jobConfigs.analyzer?.packageManagerOptions).toEqual({
+      SBOM: { options: { failFast: 'true' } },
+    });
+  });
+
+  it('leaves out the settings that only apply to source code for an SBOM repository', () => {
+    const values = createFormValues();
+    values.path = 'backend';
+    values.environmentConfigPath = 'config/.ort.env.yml';
+    values.scopes = [
+      {
+        type: 'exclude',
+        pattern: 'test',
+        reason: 'TEST_DEPENDENCY_OF',
+        comment: '',
+      },
+    ];
+    values.paths = [
+      {
+        type: 'exclude',
+        pattern: 'docs/**',
+        reason: 'DOCUMENTATION_OF',
+        comment: '',
+      },
+    ];
+
+    const payload = formValuesToPayload(values, [], true);
+
+    expect(payload.revision).toBe('main');
+    expect(payload.path).toBeUndefined();
+    expect(payload.paths).toBeUndefined();
+    expect(payload.environmentConfigPath).toBeUndefined();
+    expect(payload.scopes).toEqual({
+      excludes: [{ pattern: 'test', reason: 'TEST_DEPENDENCY_OF' }],
+      includes: [],
+    });
+  });
+
   it('omits package manager configurations without options or mustRunAfter', () => {
     const values = createFormValues();
     values.jobConfigs.analyzer.packageManagers = ['Maven'];

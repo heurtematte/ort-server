@@ -33,6 +33,8 @@ type PluginListItemProps = {
   plugin: PreconfiguredPluginDescriptor;
   selected: boolean;
   onSelectedChange: (selected: boolean) => void;
+  /** Whether the selection is fixed, so that the plugin cannot be enabled or disabled. */
+  selectionLocked?: boolean;
   /** The handle for dragging the plugin to another position, if the list is sortable. */
   dragHandle?: ReactNode;
   /**
@@ -48,6 +50,7 @@ export const PluginListItem = ({
   plugin,
   selected,
   onSelectedChange,
+  selectionLocked = false,
   dragHandle,
   settings,
   markers,
@@ -57,6 +60,7 @@ export const PluginListItem = ({
     <Checkbox
       aria-label={`Enable ${plugin.displayName}`}
       checked={selected}
+      disabled={selectionLocked}
       onCheckedChange={(checked) => onSelectedChange(checked === true)}
     />
   );

@@ -32,6 +32,7 @@ import type {
 } from '@/api';
 import { PayloadView } from '@/components/payload-view';
 import { Accordion } from '@/components/ui/accordion';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -60,6 +61,10 @@ import type {
   RepositoryPermissions,
 } from '@/lib/permissions';
 import {
+  getSbomRevisionDescription,
+  type SbomRunInput,
+} from '@/lib/sbom-source';
+import {
   AdvisorFields,
   AnalyzerFields,
   EvaluatorFields,
@@ -70,11 +75,15 @@ import {
 import {
   defaultValues,
   getDefaultPluginSelections,
+  withSbomPackageManager,
   type PluginGroups,
 } from './default-values';
 import { IncludesExcludesSection } from './includes-excludes-section';
 import { formValuesToPayload } from './payload';
-import { UNMANAGED_PACKAGE_MANAGER_ID } from './plugin-utils';
+import {
+  SBOM_PACKAGE_MANAGER_ID,
+  UNMANAGED_PACKAGE_MANAGER_ID,
+} from './plugin-utils';
 import type { ProjectSuggestions } from './project-suggestions';
 import {
   createRunFormSchema,
@@ -106,6 +115,16 @@ export type CreateRunFormProps = {
   defaultPlugins?: DefaultPlugins[];
   isSubmitting: boolean;
   isSuperuser: boolean;
+  /**
+   * Whether the repository is of type SBOM. Its runs analyze an SBOM instead of source code, so
+   * the path, the environment configuration path, and path includes and excludes do not apply.
+   */
+  isSbomRepository?: boolean;
+  /**
+   * What the runs of a repository of type SBOM analyze, which determines the meaning of the
+   * revision. Its source if it is not given.
+   */
+  sbomRunInput?: SbomRunInput;
   onConfigContextChange?: (configContext: string) => void;
   onSubmit: (payload: PostRepositoryRun) => Promise<void> | void;
   permissions: CreateRunPermissions;
@@ -126,6 +145,8 @@ export const CreateRunForm = ({
   defaultPlugins,
   isSubmitting,
   isSuperuser,
+  isSbomRepository = false,
+  sbomRunInput = { kind: 'SOURCE' },
   onConfigContextChange,
   onSubmit,
   permissions,
@@ -155,11 +176,14 @@ export const CreateRunForm = ({
         'PACKAGE_CONFIGURATION_PROVIDER'
       ),
       // The 'Unmanaged' package manager is always enabled and therefore not offered for selection.
-      packageManagerPlugins: byType('PACKAGE_MANAGER').filter(
-        (plugin) => plugin.id !== UNMANAGED_PACKAGE_MANAGER_ID
+      // The SBOM of an SBOM repository is analyzed only by the SBOM package manager.
+      packageManagerPlugins: byType('PACKAGE_MANAGER').filter((plugin) =>
+        isSbomRepository
+          ? plugin.id === SBOM_PACKAGE_MANAGER_ID
+          : plugin.id !== UNMANAGED_PACKAGE_MANAGER_ID
       ),
     };
-  }, [plugins]);
+  }, [plugins, isSbomRepository]);
   const {
     advisorPlugins,
     reporterPlugins,
@@ -198,11 +222,23 @@ export const CreateRunForm = ({
 
   // `values` lets React Hook Form update untouched fields when the plugins change.
   // Memoize them so unrelated form renders do not trigger a reset.
-  const pluginDefaults = useMemo(
-    () =>
-      defaultValues(rerun, pluginGroups, isSuperuser, defaultPluginSelections),
-    [pluginGroups, rerun, isSuperuser, defaultPluginSelections]
-  );
+  const pluginDefaults = useMemo(() => {
+    const values = defaultValues(
+      rerun,
+      pluginGroups,
+      isSuperuser,
+      defaultPluginSelections
+    );
+    return isSbomRepository
+      ? withSbomPackageManager(values, pluginGroups.packageManagerPlugins)
+      : values;
+  }, [
+    pluginGroups,
+    rerun,
+    isSuperuser,
+    defaultPluginSelections,
+    isSbomRepository,
+  ]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -359,7 +395,7 @@ export const CreateRunForm = ({
 
   async function submitForm(values: CreateRunFormValues) {
     if (pluginsUnavailable) return;
-    await onSubmit(formValuesToPayload(values, plugins));
+    await onSubmit(formValuesToPayload(values, plugins, isSbomRepository));
   }
 
   const onValidationFailed = (errors: typeof form.formState.errors) => {
@@ -415,6 +451,18 @@ export const CreateRunForm = ({
           className='space-y-8'
         >
           <CardContent>
+            {isSbomRepository && sbomRunInput.kind === 'MISSING_UPLOAD' && (
+              <Alert variant='destructive' className='mb-4'>
+                <TriangleAlert size={16} />
+                <AlertTitle>No uploaded SBOM is used</AlertTitle>
+                <AlertDescription>
+                  This repository has no source, so runs analyze the SBOM
+                  uploaded for it, but none is used. Upload an SBOM or use one
+                  from the history on the SBOM page of the repository, or the
+                  run fails.
+                </AlertDescription>
+              </Alert>
+            )}
             <FormField
               control={form.control}
               name='revision'
@@ -425,28 +473,33 @@ export const CreateRunForm = ({
                     <Input {...field} />
                   </FormControl>
                   <FormDescription>
-                    {runConfigFields.revision.description}
+                    {isSbomRepository
+                      ? getSbomRevisionDescription(sbomRunInput)
+                      : runConfigFields.revision.description}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name='path'
-              render={({ field }) => (
-                <FormItem className='pt-4'>
-                  <FormLabel>{runConfigFields.path.label}</FormLabel>
-                  <FormControl>
-                    <Input {...field} placeholder='(optional)' />
-                  </FormControl>
-                  <FormDescription>
-                    {runConfigFields.path.description}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* An SBOM is analyzed as a whole, so a path within the repository does not apply. */}
+            {!isSbomRepository && (
+              <FormField
+                control={form.control}
+                name='path'
+                render={({ field }) => (
+                  <FormItem className='pt-4'>
+                    <FormLabel>{runConfigFields.path.label}</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder='(optional)' />
+                    </FormControl>
+                    <FormDescription>
+                      {runConfigFields.path.description}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
             <FormField
               control={form.control}
               name='jobConfigContext'
@@ -465,24 +518,27 @@ export const CreateRunForm = ({
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name='environmentConfigPath'
-              render={({ field }) => (
-                <FormItem className='pt-4'>
-                  <FormLabel>
-                    {runConfigFields.environmentConfigPath.label}
-                  </FormLabel>
-                  <FormControl>
-                    <Input {...field} placeholder='(optional)' />
-                  </FormControl>
-                  <FormDescription>
-                    {runConfigFields.environmentConfigPath.description}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* The environment configuration file is read from the source code of a repository. */}
+            {!isSbomRepository && (
+              <FormField
+                control={form.control}
+                name='environmentConfigPath'
+                render={({ field }) => (
+                  <FormItem className='pt-4'>
+                    <FormLabel>
+                      {runConfigFields.environmentConfigPath.label}
+                    </FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder='(optional)' />
+                    </FormControl>
+                    <FormDescription>
+                      {runConfigFields.environmentConfigPath.description}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
             <FormField
               control={form.control}
               name='jobConfigs.ruleSet'
@@ -637,6 +693,7 @@ export const CreateRunForm = ({
             </Button>
 
             <IncludesExcludesSection
+              isSbomRepository={isSbomRepository}
               form={form}
               openItems={openAccordions}
               onOpenItemsChange={(value) =>
@@ -670,6 +727,7 @@ export const CreateRunForm = ({
                   packageManagerPlugins={packageManagerPlugins}
                   pluginSecrets={secrets}
                   permissions={permissions}
+                  isSbomRepository={isSbomRepository}
                 />
                 <AdvisorFields
                   form={form}
@@ -774,7 +832,11 @@ export const CreateRunForm = ({
                 id='payload'
                 title='Form payload'
                 description='You can copy this payload to use it when triggering runs via the API or CLI.'
-                payload={formValuesToPayload(watchedValues, plugins)}
+                payload={formValuesToPayload(
+                  watchedValues,
+                  plugins,
+                  isSbomRepository
+                )}
               />
             )}
           </CardFooter>

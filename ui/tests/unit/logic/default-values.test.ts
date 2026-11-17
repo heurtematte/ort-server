@@ -20,6 +20,7 @@
 import { expect, it } from 'vitest';
 
 import type { OrtRun, PluginType } from '@/api';
+import { withSbomPackageManager } from '@/routes/organizations/$orgId/products/$productId/repositories/$repoId/_repo-layout/create-run/-components/default-values';
 import {
   createDefaultPlugins,
   createFormDefaultValues,
@@ -713,4 +714,22 @@ it('takes the includes and excludes from reruns, excludes first', () => {
       comment: '',
     },
   ]);
+});
+
+it('selects only the SBOM package manager for an SBOM repository', () => {
+  const values = createFormDefaultValues();
+  values.jobConfigs.analyzer.packageManagers = ['Maven', 'NPM'];
+  values.jobConfigs.analyzer.packageManagerMustRunAfter = { NPM: ['Maven'] };
+
+  const sbomPlugin = createPluginDescriptor({
+    id: 'SBOM',
+    type: 'PACKAGE_MANAGER',
+  });
+
+  const sbomValues = withSbomPackageManager(values, [sbomPlugin]);
+  expect(sbomValues.jobConfigs.analyzer.packageManagers).toEqual(['SBOM']);
+  expect(sbomValues.jobConfigs.analyzer.packageManagerMustRunAfter).toEqual({});
+  expect(withSbomPackageManager(values, []).jobConfigs.analyzer).toMatchObject({
+    packageManagers: [],
+  });
 });

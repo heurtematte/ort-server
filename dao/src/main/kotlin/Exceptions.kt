@@ -28,7 +28,9 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 
 /** Enum for PostgreSQL exception states, see https://www.postgresql.org/docs/10/errcodes-appendix.html. */
 enum class PostgresErrorCodes(val value: String) {
+    DEADLOCK_DETECTED("40P01"),
     INVALID_REGULAR_EXPRESSION("2201B"),
+    SERIALIZATION_FAILURE("40001"),
     UNIQUE_CONSTRAINT_VIOLATION("23505")
 }
 

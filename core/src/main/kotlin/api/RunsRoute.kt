@@ -61,6 +61,9 @@ import org.eclipse.apoapsis.ortserver.components.authorization.routes.requireSup
 import org.eclipse.apoapsis.ortserver.components.authorization.service.AuthorizationService
 import org.eclipse.apoapsis.ortserver.components.authorization.service.InvalidHierarchyIdException
 import org.eclipse.apoapsis.ortserver.components.reportstorage.ReportStorageService
+import org.eclipse.apoapsis.ortserver.components.sbom.SbomStorageService
+import org.eclipse.apoapsis.ortserver.components.sbom.routes.mapToApi
+import org.eclipse.apoapsis.ortserver.components.sbom.routes.respondSbomFile
 import org.eclipse.apoapsis.ortserver.core.apiDocs.deleteRun
 import org.eclipse.apoapsis.ortserver.core.apiDocs.getRun
 import org.eclipse.apoapsis.ortserver.core.apiDocs.getRunIssues
@@ -72,6 +75,8 @@ import org.eclipse.apoapsis.ortserver.core.apiDocs.getRunProjects
 import org.eclipse.apoapsis.ortserver.core.apiDocs.getRunReport
 import org.eclipse.apoapsis.ortserver.core.apiDocs.getRunRuleViolationRules
 import org.eclipse.apoapsis.ortserver.core.apiDocs.getRunRuleViolations
+import org.eclipse.apoapsis.ortserver.core.apiDocs.getRunSbom
+import org.eclipse.apoapsis.ortserver.core.apiDocs.getRunSbomContent
 import org.eclipse.apoapsis.ortserver.core.apiDocs.getRunStatistics
 import org.eclipse.apoapsis.ortserver.core.apiDocs.getRunVulnerabilities
 import org.eclipse.apoapsis.ortserver.core.apiDocs.getRunVulnerabilityAdvisors
@@ -109,6 +114,7 @@ import org.eclipse.apoapsis.ortserver.shared.apimodel.SortProperty
 import org.eclipse.apoapsis.ortserver.shared.ktorutils.pagingOptions
 import org.eclipse.apoapsis.ortserver.shared.ktorutils.requireIdParameter
 import org.eclipse.apoapsis.ortserver.shared.ktorutils.requireParameter
+import org.eclipse.apoapsis.ortserver.shared.ktorutils.respondError
 import org.eclipse.apoapsis.ortserver.shared.ktorutils.stringSetFilter
 
 import org.koin.ktor.ext.inject
@@ -130,6 +136,7 @@ fun Route.runs() = route("runs") {
     val packageService by inject<PackageService>()
     val projectService by inject<ProjectService>()
     val ortRunService by inject<OrtRunService>()
+    val sbomStorageService by inject<SbomStorageService>()
 
     /**
      * Return a special [AuthorizationChecker] that checks for the given [permission] on the repository to which a
@@ -195,6 +202,19 @@ fun Route.runs() = route("runs") {
 
             ortRunService.deleteOrtRun(ortRunId)
             call.respond(HttpStatusCode.NoContent)
+        }
+
+        route("sbom") {
+            get(getRunSbom, requireRunPermission()) {
+                sbomStorageService.getRunSbom(call.ortRun.id)?.let { call.respond(HttpStatusCode.OK, it.mapToApi()) }
+                    ?: call.respondNoRunSbom()
+            }
+
+            get("content", getRunSbomContent, requireRunPermission()) {
+                sbomStorageService.getRunSbomContent(call.ortRun.id)?.let { (runSbom, content) ->
+                    call.respondSbomFile(runSbom.fileName, runSbom.format.mediaType, content)
+                } ?: call.respondNoRunSbom()
+            }
         }
 
         route("logs") {
@@ -671,3 +691,7 @@ private val keyOrtRun = AttributeKey<OrtRun>("RunsRoute.OrtRun")
 /** The current [OrtRun] stored in this [ApplicationCall]. */
 private val ApplicationCall.ortRun: OrtRun
     get() = attributes[keyOrtRun]
+
+/** Respond that the ORT run of this call did not analyze an SBOM. */
+private suspend fun ApplicationCall.respondNoRunSbom() =
+    respondError(HttpStatusCode.NotFound, "ORT run '${ortRun.id}' did not analyze an SBOM.")

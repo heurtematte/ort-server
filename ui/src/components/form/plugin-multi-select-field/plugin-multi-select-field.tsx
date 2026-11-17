@@ -86,6 +86,11 @@ type PluginMultiSelectFieldProps<
   defaultPluginIds?: readonly string[];
   /** The default scanner scopes of the default plugins, if the plugins have scopes. */
   defaultScannerScopes?: Readonly<Record<string, ScannerScope>>;
+  /**
+   * Whether the selection is fixed. Then the plugins cannot be enabled or disabled, and only
+   * their settings can be changed.
+   */
+  selectionLocked?: boolean;
   className?: string;
 };
 
@@ -131,6 +136,7 @@ const PluginMultiSelectFieldContent = <
   enableReordering = false,
   defaultPluginIds,
   defaultScannerScopes,
+  selectionLocked = false,
   className,
 }: PluginMultiSelectFieldProps<TFieldValues, TName> & {
   field: ControllerRenderProps<TFieldValues, TName>;
@@ -216,6 +222,7 @@ const PluginMultiSelectFieldContent = <
         plugin={plugin}
         selected={selected}
         onSelectedChange={(checked) => setSelected(plugin, checked)}
+        selectionLocked={selectionLocked}
         dragHandle={dragHandle}
         markers={
           <PluginOptionMarkers
@@ -254,12 +261,16 @@ const PluginMultiSelectFieldContent = <
       className={className}
       headerActions={
         <div className='flex items-center justify-between'>
-          <SelectAllCheckbox
-            state={selection.allState}
-            onChange={setAllSelected}
-          />
+          {selectionLocked ? (
+            <span />
+          ) : (
+            <SelectAllCheckbox
+              state={selection.allState}
+              onChange={setAllSelected}
+            />
+          )}
           <div className='flex items-center gap-2'>
-            {defaultPluginIds && (
+            {defaultPluginIds && !selectionLocked && (
               <ResetToDefaultsButton
                 onClick={() => resetToDefaults(defaultPluginIds)}
               />

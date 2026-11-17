@@ -24,6 +24,7 @@ import kotlin.time.Clock
 import org.eclipse.apoapsis.ortserver.components.adminconfig.AdminConfigService
 import org.eclipse.apoapsis.ortserver.components.resolutions.issues.IssueResolutionService
 import org.eclipse.apoapsis.ortserver.dao.transaction
+import org.eclipse.apoapsis.ortserver.model.OrtRun
 import org.eclipse.apoapsis.ortserver.model.RepositoryId
 import org.eclipse.apoapsis.ortserver.model.runs.reporter.Report
 import org.eclipse.apoapsis.ortserver.model.runs.reporter.ReporterRun
@@ -39,7 +40,6 @@ import org.eclipse.apoapsis.ortserver.workers.common.validateForProcessing
 
 import org.jetbrains.exposed.v1.jdbc.Database
 
-import org.ossreviewtoolkit.model.Repository
 import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.utils.ort.ORT_VERSION
 
@@ -76,7 +76,10 @@ internal class ReporterWorker(
         val ortResult = ortRunService.generateOrtResult(ortRun, failIfRepoInfoMissing = false)
         val startTime = Clock.System.now()
 
-        if (ortResult.repository == Repository.EMPTY) {
+        // Check whether the information was stored rather than comparing the repository to Repository.EMPTY: the
+        // repository of a run of an SBOM repository has no VCS information, so that it is equal to Repository.EMPTY if
+        // it has no configuration either.
+        if (!ortRun.hasRepositoryInformation()) {
             logger.warn(
                 "No repository information found in ORT result for ORT run '${job.ortRunId}'. Most likely, the " +
                         "analyzer worker did not complete successfully."
@@ -193,3 +196,7 @@ internal class ReporterWorker(
         return Report(file, reportToken.downloadLink, reportToken.expirationTime, sizeInBytes)
     }
 }
+
+/** Return whether the analyzer stored the information about the repository of this run. */
+private fun OrtRun.hasRepositoryInformation() =
+    vcsId != null && vcsProcessedId != null && nestedRepositoryIds != null

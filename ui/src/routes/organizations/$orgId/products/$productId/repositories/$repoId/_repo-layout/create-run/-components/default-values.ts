@@ -33,6 +33,7 @@ import {
   packageManagerConfigsToFormValues,
   providerPluginConfigsToFormValues,
   reconstructScannerSelection,
+  SBOM_PACKAGE_MANAGER_ID,
   UNMANAGED_PACKAGE_MANAGER_ID,
 } from './plugin-utils';
 import type { CreateRunFormValues } from './run-schema';
@@ -416,4 +417,30 @@ export function defaultValues(
           ortRun.environmentConfigPath || baseDefaults.environmentConfigPath,
       }
     : baseDefaults;
+}
+
+/**
+ * Return the given form values for a run of a repository of type SBOM, whose SBOM is analyzed only
+ * by the SBOM package manager: this package manager is selected if it is one of the given package
+ * manager plugins, and no other package manager is, so no package manager must run after another.
+ */
+export function withSbomPackageManager(
+  values: CreateRunFormValues,
+  packageManagerPlugins: readonly PreconfiguredPluginDescriptor[]
+): CreateRunFormValues {
+  const sbomAvailable = packageManagerPlugins.some(
+    (plugin) => plugin.id === SBOM_PACKAGE_MANAGER_ID
+  );
+
+  return {
+    ...values,
+    jobConfigs: {
+      ...values.jobConfigs,
+      analyzer: {
+        ...values.jobConfigs.analyzer,
+        packageManagers: sbomAvailable ? [SBOM_PACKAGE_MANAGER_ID] : [],
+        packageManagerMustRunAfter: {},
+      },
+    },
+  };
 }

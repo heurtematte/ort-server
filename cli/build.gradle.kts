@@ -64,6 +64,7 @@ kotlin {
             dependencies {
                 api(projects.api.v1.apiV1Client)
                 api(projects.api.v1.apiV1Model)
+                api(projects.components.sbom.sbomApiModel)
 
                 api(libs.clikt)
                 api(libs.okio)

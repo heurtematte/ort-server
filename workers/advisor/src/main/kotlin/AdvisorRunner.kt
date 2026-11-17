@@ -25,6 +25,7 @@ import org.eclipse.apoapsis.ortserver.workers.common.context.WorkerContext
 
 import org.ossreviewtoolkit.advisor.Advisor
 import org.ossreviewtoolkit.model.OrtResult
+import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.config.AdvisorConfiguration
 import org.ossreviewtoolkit.plugins.advisors.api.AdviceProviderFactory
 
@@ -56,6 +57,39 @@ internal class AdvisorRunner {
 
         val advisor = Advisor(providerFactories, advisorConfig)
 
-        return advisor.advise(ortResult, config.skipExcluded)
+        // Without an analyzer result, ORT only logs a warning and returns the result as it is.
+        if (ortResult.analyzer == null) return advisor.advise(ortResult, config.skipExcluded)
+
+        // Like ORT, give advice for the projects as packages, too, but leave out what no advice provider can identify.
+        val (unidentifiable, packages) = (
+            ortResult.getProjects(config.skipExcluded).mapTo(mutableSetOf()) { it.toPackage() } +
+                ortResult.getPackages(config.skipExcluded).mapTo(mutableSetOf()) { it.metadata }
+            ).partition { it.isUnidentifiableSbomPackage() }
+
+        if (unidentifiable.isNotEmpty()) {
+            logger.info(
+                "Giving no advice for {} project(s) and package(s) of type '{}' without purl or VCS revision: {}.",
+                unidentifiable.size,
+                SBOM_TYPE,
+                unidentifiable.joinToString { it.id.toCoordinates() }
+            )
+        }
+
+        return ortResult.copy(advisor = advisor.advise(packages.toSet()))
     }
 }
+
+/**
+ * The type of the projects that the SBOM package manager creates for the components that an SBOM describes, and of
+ * the packages for components without purl.
+ */
+private const val SBOM_TYPE = "SBOM"
+
+/**
+ * Return whether this is a project or package created from an SBOM that advice providers cannot identify, such as
+ * the projects of a repository of type SBOM, which ORT gives no purl, or a component without purl. Without a purl and
+ * a VCS revision, OSV takes the type as the ecosystem to query, which it rejects as invalid for "SBOM", and the other
+ * advice providers skip it.
+ */
+private fun Package.isUnidentifiableSbomPackage() =
+    id.type == SBOM_TYPE && purl.isEmpty() && vcsProcessed.revision.isEmpty()

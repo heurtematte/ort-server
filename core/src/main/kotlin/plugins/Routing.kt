@@ -33,6 +33,7 @@ import org.eclipse.apoapsis.ortserver.components.infrastructureservices.infrastr
 import org.eclipse.apoapsis.ortserver.components.licensefindings.licenseFindingRoutes
 import org.eclipse.apoapsis.ortserver.components.pluginmanager.pluginManagerRoutes
 import org.eclipse.apoapsis.ortserver.components.resolutions.routes.resolutionRoutes
+import org.eclipse.apoapsis.ortserver.components.sbom.routes.sbomRoutes
 import org.eclipse.apoapsis.ortserver.components.search.searchRoutes
 import org.eclipse.apoapsis.ortserver.components.secrets.secretsRoutes
 import org.eclipse.apoapsis.ortserver.components.serversettings.serverSettingsRoutes
@@ -74,6 +75,7 @@ fun Application.configureRouting() {
                     products()
                     repositories()
                     resolutionRoutes(get(), get(), get())
+                    sbomRoutes(get(), get(), get())
                     runs()
                     searchRoutes(get())
                     secretsCompositionRoutes(get(), get())

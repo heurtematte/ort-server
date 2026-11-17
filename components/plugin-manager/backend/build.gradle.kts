@@ -59,6 +59,7 @@ dependencies {
     implementation(ortLibs.scanner)
 
     // Add all ORT plugins as runtime dependencies so that the plugin manager can discover them.
+    runtimeOnly(libs.sbom.packageManager)
     runtimeOnly(projects.shared.reporters)
     runtimeOnly(platform(ortLibs.ortPlugins.advisors))
     runtimeOnly(platform(ortLibs.ortPlugins.packageConfigurationProviders))

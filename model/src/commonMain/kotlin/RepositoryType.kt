@@ -19,16 +19,26 @@
 
 package org.eclipse.apoapsis.ortserver.model
 
-/** A class to represent the type of a source code repository. */
+/**
+ * A class to represent the type of a source code repository. The special type [SBOM] denotes a repository whose content
+ * is described by an existing SBOM instead of source code.
+ */
 data class RepositoryType(val name: String) {
     companion object {
         val GIT = RepositoryType("GIT")
         val GIT_REPO = RepositoryType("GIT_REPO")
         val MERCURIAL = RepositoryType("MERCURIAL")
         val SUBVERSION = RepositoryType("SUBVERSION")
+
+        /**
+         * The type of repositories that are analyzed based on an existing SBOM, which is either uploaded to ORT Server
+         * or downloaded from the repository URL, instead of source code.
+         */
+        val SBOM = RepositoryType("SBOM")
+
         val UNKNOWN = RepositoryType("")
 
-        private val STANDARD_TYPES = setOf(GIT, GIT_REPO, MERCURIAL, SUBVERSION)
+        private val STANDARD_TYPES = setOf(GIT, GIT_REPO, MERCURIAL, SUBVERSION, SBOM)
 
         /**
          * Return a [RepositoryType] instance for the given [type][name]. This can be one of the known standard types

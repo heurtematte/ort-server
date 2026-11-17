@@ -17,14 +17,33 @@
  * License-Filename: LICENSE
  */
 
+import { useSuspenseQuery } from '@tanstack/react-query';
 import { createFileRoute, Outlet } from '@tanstack/react-router';
-import { BookLock, Eye, Search, ServerCog, Settings, User } from 'lucide-react';
+import {
+  BookLock,
+  Eye,
+  FileUp,
+  GitCompare,
+  Search,
+  ServerCog,
+  Settings,
+  User,
+} from 'lucide-react';
 
+import { getRepositoryOptions } from '@/api/@tanstack/react-query.gen';
 import { PageLayout } from '@/components/page-layout';
 import { SidebarNavProps } from '@/components/sidebar';
 
 const RepoLayout = () => {
+  const params = Route.useParams();
   const repositoryPermissions = Route.useRouteContext().permissions.repository;
+
+  // The repository is already loaded by the parent route.
+  const { data: repository } = useSuspenseQuery({
+    ...getRepositoryOptions({
+      path: { repositoryId: Number.parseInt(params.repoId) },
+    }),
+  });
 
   const sections: SidebarNavProps['sections'] = [
     {
@@ -33,6 +52,11 @@ const RepoLayout = () => {
           title: 'Overview',
           to: '/organizations/$orgId/products/$productId/repositories/$repoId/runs',
           icon: () => <Eye className='h-4 w-4' />,
+        },
+        {
+          title: 'Compare Runs',
+          to: '/organizations/$orgId/products/$productId/repositories/$repoId/compare',
+          icon: () => <GitCompare className='h-4 w-4' />,
         },
       ],
     },
@@ -54,6 +78,14 @@ const RepoLayout = () => {
     {
       label: 'Repository',
       items: [
+        {
+          title: 'SBOM',
+          to: '/organizations/$orgId/products/$productId/repositories/$repoId/sbom',
+          icon: () => <FileUp className='h-4 w-4' />,
+          visible:
+            repository.type === 'SBOM' &&
+            repositoryPermissions?.includes('READ'),
+        },
         {
           title: 'Secrets',
           to: '/organizations/$orgId/products/$productId/repositories/$repoId/secrets',

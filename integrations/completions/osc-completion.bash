@@ -68,6 +68,10 @@ _osc() {
         _osc_runs $(( i + 1 ))
         return
         ;;
+      sbom)
+        _osc_sbom $(( i + 1 ))
+        return
+        ;;
       *)
         (( i = i + 1 ))
         # drop the head of the array
@@ -96,7 +100,7 @@ _osc() {
     "--help")
       ;;
     *)
-      COMPREPLY=($(compgen -W 'auth runs' -- "${word}"))
+      COMPREPLY=($(compgen -W 'auth runs sbom' -- "${word}"))
       ;;
   esac
 }
@@ -749,6 +753,259 @@ _osc_runs_start() {
        __complete_files "${word}"
       ;;
     "--parameters")
+      ;;
+    "--help")
+      ;;
+  esac
+}
+
+_osc_sbom() {
+  local i=$1
+  local in_param=''
+  local fixed_arg_names=()
+  local vararg_name=''
+  local can_parse_options=1
+
+  while [[ ${i} -lt $COMP_CWORD ]]; do
+    if [[ ${can_parse_options} -eq 1 ]]; then
+      case "${COMP_WORDS[$i]}" in
+        --)
+          can_parse_options=0
+          (( i = i + 1 ));
+          continue
+          ;;
+        -h|--help)
+          __skip_opt_eq
+          in_param=''
+          continue
+          ;;
+      esac
+    fi
+    case "${COMP_WORDS[$i]}" in
+      download)
+        _osc_sbom_download $(( i + 1 ))
+        return
+        ;;
+      info)
+        _osc_sbom_info $(( i + 1 ))
+        return
+        ;;
+      upload)
+        _osc_sbom_upload $(( i + 1 ))
+        return
+        ;;
+      *)
+        (( i = i + 1 ))
+        # drop the head of the array
+        fixed_arg_names=("${fixed_arg_names[@]:1}")
+        ;;
+    esac
+  done
+  local word="${COMP_WORDS[$COMP_CWORD]}"
+  if [[ "${word}" =~ ^[-] ]]; then
+    COMPREPLY=($(compgen -W '-h --help' -- "${word}"))
+    return
+  fi
+
+  # We're either at an option's value, or the first remaining fixed size
+  # arg, or the vararg if there are no fixed args left
+  [[ -z "${in_param}" ]] && in_param=${fixed_arg_names[0]}
+  [[ -z "${in_param}" ]] && in_param=${vararg_name}
+
+  case "${in_param}" in
+    "--help")
+      ;;
+    *)
+      COMPREPLY=($(compgen -W 'download info upload' -- "${word}"))
+      ;;
+  esac
+}
+
+_osc_sbom_download() {
+  local i=$1
+  local in_param=''
+  local fixed_arg_names=()
+  local vararg_name=''
+  local can_parse_options=1
+
+  while [[ ${i} -lt $COMP_CWORD ]]; do
+    if [[ ${can_parse_options} -eq 1 ]]; then
+      case "${COMP_WORDS[$i]}" in
+        --)
+          can_parse_options=0
+          (( i = i + 1 ));
+          continue
+          ;;
+        --repository-id)
+          __skip_opt_eq
+          (( i = i + 1 ))
+          [[ ${i} -gt COMP_CWORD ]] && in_param='--repository-id' || in_param=''
+          continue
+          ;;
+        --output|-o)
+          __skip_opt_eq
+          (( i = i + 1 ))
+          [[ ${i} -gt COMP_CWORD ]] && in_param='--output' || in_param=''
+          continue
+          ;;
+        -h|--help)
+          __skip_opt_eq
+          in_param=''
+          continue
+          ;;
+      esac
+    fi
+    case "${COMP_WORDS[$i]}" in
+      *)
+        (( i = i + 1 ))
+        # drop the head of the array
+        fixed_arg_names=("${fixed_arg_names[@]:1}")
+        ;;
+    esac
+  done
+  local word="${COMP_WORDS[$COMP_CWORD]}"
+  if [[ "${word}" =~ ^[-] ]]; then
+    COMPREPLY=($(compgen -W '--repository-id --output -o -h --help' -- "${word}"))
+    return
+  fi
+
+  # We're either at an option's value, or the first remaining fixed size
+  # arg, or the vararg if there are no fixed args left
+  [[ -z "${in_param}" ]] && in_param=${fixed_arg_names[0]}
+  [[ -z "${in_param}" ]] && in_param=${vararg_name}
+
+  case "${in_param}" in
+    "--repository-id")
+      ;;
+    "--output")
+       __complete_files "${word}"
+      ;;
+    "--help")
+      ;;
+  esac
+}
+
+_osc_sbom_info() {
+  local i=$1
+  local in_param=''
+  local fixed_arg_names=()
+  local vararg_name=''
+  local can_parse_options=1
+
+  while [[ ${i} -lt $COMP_CWORD ]]; do
+    if [[ ${can_parse_options} -eq 1 ]]; then
+      case "${COMP_WORDS[$i]}" in
+        --)
+          can_parse_options=0
+          (( i = i + 1 ));
+          continue
+          ;;
+        --repository-id)
+          __skip_opt_eq
+          (( i = i + 1 ))
+          [[ ${i} -gt COMP_CWORD ]] && in_param='--repository-id' || in_param=''
+          continue
+          ;;
+        -h|--help)
+          __skip_opt_eq
+          in_param=''
+          continue
+          ;;
+      esac
+    fi
+    case "${COMP_WORDS[$i]}" in
+      *)
+        (( i = i + 1 ))
+        # drop the head of the array
+        fixed_arg_names=("${fixed_arg_names[@]:1}")
+        ;;
+    esac
+  done
+  local word="${COMP_WORDS[$COMP_CWORD]}"
+  if [[ "${word}" =~ ^[-] ]]; then
+    COMPREPLY=($(compgen -W '--repository-id -h --help' -- "${word}"))
+    return
+  fi
+
+  # We're either at an option's value, or the first remaining fixed size
+  # arg, or the vararg if there are no fixed args left
+  [[ -z "${in_param}" ]] && in_param=${fixed_arg_names[0]}
+  [[ -z "${in_param}" ]] && in_param=${vararg_name}
+
+  case "${in_param}" in
+    "--repository-id")
+      ;;
+    "--help")
+      ;;
+  esac
+}
+
+_osc_sbom_upload() {
+  local i=$1
+  local in_param=''
+  local fixed_arg_names=()
+  local vararg_name=''
+  local can_parse_options=1
+
+  while [[ ${i} -lt $COMP_CWORD ]]; do
+    if [[ ${can_parse_options} -eq 1 ]]; then
+      case "${COMP_WORDS[$i]}" in
+        --)
+          can_parse_options=0
+          (( i = i + 1 ));
+          continue
+          ;;
+        --repository-id)
+          __skip_opt_eq
+          (( i = i + 1 ))
+          [[ ${i} -gt COMP_CWORD ]] && in_param='--repository-id' || in_param=''
+          continue
+          ;;
+        --file)
+          __skip_opt_eq
+          (( i = i + 1 ))
+          [[ ${i} -gt COMP_CWORD ]] && in_param='--file' || in_param=''
+          continue
+          ;;
+        --file-name)
+          __skip_opt_eq
+          (( i = i + 1 ))
+          [[ ${i} -gt COMP_CWORD ]] && in_param='--file-name' || in_param=''
+          continue
+          ;;
+        -h|--help)
+          __skip_opt_eq
+          in_param=''
+          continue
+          ;;
+      esac
+    fi
+    case "${COMP_WORDS[$i]}" in
+      *)
+        (( i = i + 1 ))
+        # drop the head of the array
+        fixed_arg_names=("${fixed_arg_names[@]:1}")
+        ;;
+    esac
+  done
+  local word="${COMP_WORDS[$COMP_CWORD]}"
+  if [[ "${word}" =~ ^[-] ]]; then
+    COMPREPLY=($(compgen -W '--repository-id --file --file-name -h --help' -- "${word}"))
+    return
+  fi
+
+  # We're either at an option's value, or the first remaining fixed size
+  # arg, or the vararg if there are no fixed args left
+  [[ -z "${in_param}" ]] && in_param=${fixed_arg_names[0]}
+  [[ -z "${in_param}" ]] && in_param=${vararg_name}
+
+  case "${in_param}" in
+    "--repository-id")
+      ;;
+    "--file")
+       __complete_files "${word}"
+      ;;
+    "--file-name")
       ;;
     "--help")
       ;;

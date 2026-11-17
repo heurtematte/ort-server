@@ -25,6 +25,24 @@ repositories {
 
         content {
             includeGroupAndSubgroups("org.ossreviewtoolkit")
+
+            // Allow testing unpublished versions of the ORT SBOM plugin.
+            includeGroup("org.eclipse.apoapsis.sbom")
+        }
+    }
+
+    // The ORT SBOM plugin is published to GitHub Packages until it is available from Maven Central. GitHub Packages
+    // requires a token with the "read:packages" scope also for public packages, such as the one of "gh auth token".
+    maven("https://maven.pkg.github.com/heurtematte/ort-sbom-plugin") {
+        name = "ortSbomPlugin"
+
+        credentials {
+            username = providers.environmentVariable("GITHUB_ACTOR").getOrElse("token")
+            password = providers.environmentVariable("GITHUB_TOKEN").orNull
+        }
+
+        content {
+            includeGroup("org.eclipse.apoapsis.sbom")
         }
     }
 

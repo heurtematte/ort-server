@@ -366,6 +366,11 @@ val patchRepository: RouteConfig.() -> Unit = {
             }
         }
 
+        HttpStatusCode.BadRequest to {
+            description = "The URL or the type of a repository changes to a repository of type SBOM whose source " +
+                "cannot be identified."
+        }
+
         HttpStatusCode.NotFound to {
             description = "The repository does not exist."
         }

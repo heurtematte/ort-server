@@ -18,6 +18,8 @@ env:
   REGISTRY: ghcr.io
   IS_PR: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
   IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-RC') }}
+  # Gradle reads the ORT SBOM plugin from GitHub Packages, which requires a token also for public packages.
+  GITHUB_TOKEN: ${{ github.token }}
 
 jobs:
   build-base-image:

@@ -60,6 +60,7 @@ micrometer = "1.17.2"
 mockk = "1.14.12"
 mordant = "3.1.1"
 netty = "4.2.20.Final"
+ortSbomPlugin = "0.1.0-SNAPSHOT"
 okio = "3.18.2"
 postgres = "42.7.14"
 springSecurityCrypto = "7.1.2"
@@ -142,6 +143,9 @@ spring-security-crypto = { module = "org.springframework.security:spring-securit
 qpidJmsClient = { module = "org.apache.qpid:qpid-jms-client", version.ref = "qpidJmsClient" }
 rabbitMqAmqpClient = { module = "com.rabbitmq:amqp-client", version.ref = "rabbitMq" }
 s3 = { module = "aws.sdk.kotlin:s3", version.ref = "awsSdk" }
+sbom-packageManager = { module = "org.eclipse.apoapsis.sbom:sbom-package-manager", version.ref = "ortSbomPlugin" }
+sbom-parser = { module = "org.eclipse.apoapsis.sbom:sbom-parser", version.ref = "ortSbomPlugin" }
+sbom-sources = { module = "org.eclipse.apoapsis.sbom:sbom-sources", version.ref = "ortSbomPlugin" }
 schemaKenerator-core = { module = "io.github.smiley4:schema-kenerator-core", version.ref = "schemaKenerator" }
 schemaKenerator-reflection = { module = "io.github.smiley4:schema-kenerator-reflection", version.ref = "schemaKenerator" }
 schemaKenerator-swagger = { module = "io.github.smiley4:schema-kenerator-swagger", version.ref = "schemaKenerator" }

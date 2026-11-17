@@ -49,6 +49,9 @@ internal fun Path.mkdirs() = FileSystem.SYSTEM.createDirectories(this)
 /** Read the content of the file at this [Path] as a UTF8 [String]. */
 internal fun Path.read() = FileSystem.SYSTEM.read(this) { readUtf8() }
 
+/** Read the content of the file at this [Path] as a [ByteArray]. */
+internal fun Path.readBytes() = FileSystem.SYSTEM.read(this) { readByteArray() }
+
 /** Write the UTF8 [content] to the file at this [Path]. */
 internal fun Path.write(content: String) = FileSystem.SYSTEM.write(this) { writeUtf8(content) }
 
