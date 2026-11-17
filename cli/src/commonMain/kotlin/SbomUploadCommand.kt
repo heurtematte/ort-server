@@ -63,9 +63,9 @@ class SbomUploadCommand : SuspendingCliktCommand(name = "upload") {
         help = "The file name to store with the SBOM. If not provided, the name of the uploaded file is used."
     )
 
-    override fun help(context: Context) = """
-        Upload the SBOM of a repository of type SBOM, replacing its current SBOM.
+    override fun help(context: Context) = "Upload the SBOM of a repository of type SBOM, replacing its current SBOM."
 
+    override fun helpEpilog(context: Context) = """
         The format of the SBOM is detected from its content. The server validates the SBOM before storing it, and runs
         started afterwards, for instance with '$COMMAND_NAME runs start --repository-id <ID> ...', analyze it.
     """.trimIndent()
